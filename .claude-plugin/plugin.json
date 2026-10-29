@@ -1,0 +1,11 @@
+{
+  "name": "agent-office",
+  "version": "1.0.0",
+  "description": "A pixel-art office beside the chat: every subagent Claude starts takes a desk in its department, and a browser window shows the office with a chat to Claude at the front desk",
+  "author": {
+    "name": "agent-office contributors"
+  },
+  "license": "MIT",
+  "keywords": ["subagents", "pixel-art", "pane", "office"],
+  "types": "./types/index.d.ts"
+}

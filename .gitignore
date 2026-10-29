@@ -1,0 +1,25 @@
+# written by Claude Code when it loads the plugin from this folder
+.claude-plugin/types/
+.mcpb-cache/
+
+# runtime files (the plugin writes these under your Claude config folder, never here; listed in case of a manual run)
+run/
+*.log
+office.config.json
+office.html
+office.css
+layout.js
+staff.js
+sprites.js
+convo.js
+
+# Python, Node, editors, OS
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/

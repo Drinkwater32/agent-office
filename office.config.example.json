@@ -1,0 +1,28 @@
+{
+  "//": "Copy to <your Claude config folder>/agent-office/office.config.json (or run /office-config), edit, then run /office-config again.",
+  "owner": {
+    "name": "You",
+    "look": { "skin": "light", "hair": "#3b2a20", "style": "crop", "top": "#5b6b8c", "glasses": false, "beard": false }
+  },
+  "departments": [
+    { "name": "Engineering", "color": "#7c3aed", "agentTypes": ["general-purpose"],
+      "keywords": ["implement", "build", "fix", "bug", "refactor", "feature", "migrat"] },
+    { "name": "Review", "color": "#ef4444", "keywords": ["review", "audit", "verify", "check", "test", "security"] },
+    { "name": "Design", "color": "#f59e0b", "keywords": ["design", "ui", "css", "layout", "screenshot", "docs", "copy"] },
+    { "name": "Research", "color": "#14b8a6", "agentTypes": ["Explore", "Plan"],
+      "keywords": ["research", "explore", "search", "find", "investigate", "plan"] }
+  ],
+  "routing": "match",
+  "staff": [
+    { "name": "" },
+    { "name": "" },
+    { "name": "" },
+    { "name": "" },
+    { "name": "" },
+    { "name": "" }
+  ],
+  "pets": [
+    { "name": "Cat", "coat": "short", "color": "orange" },
+    { "name": "Kitten", "coat": "long", "color": "cream" }
+  ]
+}

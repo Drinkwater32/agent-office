@@ -1,0 +1,11 @@
+{
+  "name": "agent-office",
+  "owner": { "name": "agent-office contributors" },
+  "plugins": [
+    {
+      "name": "agent-office",
+      "source": "./",
+      "description": "A pixel-art office for your Claude Code subagents, with a browser popout and a local chat"
+    }
+  ]
+}
