@@ -1,8 +1,10 @@
 // The office's lo-fi soundtrack: off on every load, and it plays only once you turn it on (browsers allow sound only
 // after a click anyway). The loop is the plugin's own file (lofi.wav, made from scratch by tools/make_lofi.py), read
 // from the local bridge like the scripts (a fetch, so the page's CSP needs nothing new) and played through Web Audio,
-// looped without a seam. A mute button sits beside the toggle while it plays, both in the office's title bar. A hidden
-// tab pauses it. `soundtrack.enabled: false` in the config leaves the toggle out entirely. Its style is in office.css.
+// looped without a seam. A mute button sits beside the toggle while it plays, both in the office's title bar. Once on,
+// it keeps playing in a hidden, minimized or covered window until you turn it off or mute it; if the browser itself
+// suspends the sound, it resumes on your return or your next click or key. `soundtrack.enabled: false` in the config
+// leaves the toggle out entirely. Its style is in office.css.
 (function () {
   'use strict'
   const CFG = window.__aoCfg || {}
@@ -56,7 +58,8 @@
         gain.gain.value = VOL
         gain.connect(ctx.destination)
       }
-      if (ctx.state === 'suspended') ctx.resume()
+      if (ctx.state === 'suspended') resume()
+      ctx.onstatechange = wake
       state = 'loading'
       draw()
       if (!buf) buf = await load()
@@ -86,11 +89,20 @@
     gain.gain.setTargetAtTime(m ? 0 : VOL, ctx.currentTime, 0.04)
     draw()
   }
-  document.addEventListener('visibilitychange', () => {
-    if (!ctx) return
-    if (document.hidden) ctx.suspend()
-    else if (state === 'on') ctx.resume()
-  })
+  // never paused here: if the browser suspended the sound (some do in a background tab), wake it when it can
+  function wake() {
+    if (ctx && state === 'on' && ctx.state !== 'running' && ctx.state !== 'closed') resume()
+  }
+  function resume() {
+    try {
+      const p = ctx.resume()
+      if (p && p.catch) p.catch(() => undefined)        // not allowed yet: the next click or key tries again
+    } catch (e) { /* an old browser */ }
+  }
+  document.addEventListener('visibilitychange', wake)
+  window.addEventListener('focus', wake)
+  window.addEventListener('pointerdown', wake, true)
+  window.addEventListener('keydown', wake, true)
 
   // -- the controls: two buttons side by side, the same height (the toggle, and mute while it plays)
   const g = document.createElement('div')

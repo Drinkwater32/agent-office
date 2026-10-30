@@ -93,7 +93,7 @@ let spriteKey = ''
 let convoKey = ''
 let convoVer = ''
 let scriptStamp = ''
-const SCRIPTS = ['engine.js', 'frontdesk.js', 'conference.js', 'extras.js', 'lofi.js']
+const SCRIPTS = ['engine.js', 'frontdesk.js', 'meetplay.js', 'conference.js', 'extras.js', 'lofi.js']
 let pageSeason = ''           // the season the page was drawn in: a new one rebuilds it (its decor is in the drawing)
 
 // whether a script changed since the page was written (a stat a poll; the page is rebuilt when one did)
@@ -657,7 +657,8 @@ function meetingTool() {
       `was there; turn appends one turn. The owner ("owner", ${ctx.owner}) and Claude as the chair ("claude") always ` +
       `attend; list up to ${M.OTHERS_MAX} more: departments ${depts || '(none)'}${named ? `, staff ${named}` : ''}. ` +
       'Statuses: scheduled, gathering (they walk in), in_session (proposals), discussion, wrap_up (decisions), ended ' +
-      "(they walk out; the decisions stay on the screen). Keep each turn's text short: it is read in a bubble. Never " +
+      "(they walk out; the decisions stay on the screen). Keep each turn's text short: it is read in a bubble. Turns " +
+      'are animated in the room at a reading pace, so it is fine to send them quickly, one after another. Never ' +
       "put words in the owner's mouth.",
     inputSchema: { type: 'object', properties: {
       id: { type: 'string', description: "The meeting's id (letters, digits, - or _): leave out to update the current one" },
@@ -930,7 +931,7 @@ export const register: Register = on => {
         <Text bold>Inbox: {done.length} handed back</Text>
         {done.slice(-4).reverse().map(s => (
           <Text dimColor>
-            {s.isFailed ? 'failed ' : ''}{label(s.desk).padEnd(12)} {s.task} · {mins(s)}m
+            {s.isFailed ? 'Failed: ' : 'Handed back: '}{label(s.desk)} · {s.task} · took {mins(s) ? `${mins(s)}m` : 'under 1m'}
           </Text>
         ))}
       </Box>

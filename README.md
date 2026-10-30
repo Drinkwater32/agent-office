@@ -1,6 +1,42 @@
 # agent-office
 
-> In the commands below, replace `<owner>` with the GitHub account or organization that hosts this repository.
+A pixel-art office for Claude Code: your subagents at their desks, a chat with Claude at the front desk, and a
+conference room for meetings, in a browser window beside your session.
+
+![The office in a browser window, with a meeting in the conference room](docs/screenshot.png)
+
+## Try it in 2 minutes
+
+**You need** Claude Code (the CLI, the VS Code extension or the desktop app), and Python 3.8 or newer for the chat
+(without Python the office still opens, read-only).
+
+1. Install it, in a terminal:
+
+   ```sh
+   claude plugin marketplace add Drinkwater32/agent-office
+   claude plugin install agent-office@agent-office
+   ```
+
+2. Start Claude in any project folder: `claude`.
+   - Asked whether you trust the folder? Yes.
+   - Asked about **Claude in Chrome**? No: the office doesn't need it.
+3. The office opens in your browser by itself. If it doesn't, type `/office`.
+
+**Three things to try:**
+
+- Ask for something with an agent: *"Explore how this project is laid out, with an agent."* It walks in, takes a
+  desk, works, then carries its report to the front desk.
+- Type in the office's chat (the front desk, on the right) and press Enter. It reaches the same session as the
+  terminal.
+- *"Call a quick meeting with two departments about naming the office cat."* They walk into the conference room, talk
+  in bubbles, and the decision goes up on the screen.
+
+**Uninstall:**
+
+```sh
+claude plugin uninstall agent-office@agent-office
+claude plugin marketplace remove agent-office
+```
 
 ## What it is
 
@@ -9,8 +45,6 @@ there, its latest words in a bubble and its current tool on a tag. When it finis
 desk, where Claude sits. The office opens in your browser beside a chat with Claude: what you type there goes to your
 session as if you had typed it in the terminal. It also has a conference room where Claude runs meetings between your
 departments, a usage gauge, a whiteboard with your branches, pets, day and night, and an optional lo-fi soundtrack.
-
-![The office in a browser window, with a meeting in the conference room](docs/screenshot.png)
 
 ## Requirements
 
@@ -31,7 +65,7 @@ departments, a usage gauge, a whiteboard with your branches, pets, day and night
 1. Add the marketplace:
 
    ```sh
-   claude plugin marketplace add <owner>/agent-office
+   claude plugin marketplace add Drinkwater32/agent-office
    ```
 
 2. Install the plugin:
@@ -42,9 +76,9 @@ departments, a usage gauge, a whiteboard with your branches, pets, day and night
 
 3. Start a new Claude Code session (or run `/reload-plugins` in one that is open).
 
-The same steps from inside a session: `/plugin marketplace add <owner>/agent-office`, then
+The same steps from inside a session: `/plugin marketplace add Drinkwater32/agent-office`, then
 `/plugin install agent-office@agent-office`, then `/reload-plugins`. In the desktop app: click **+** next to the prompt
-box, then **Plugins**, **Add marketplace** with `<owner>/agent-office`, then **Add plugin**.
+box, then **Plugins**, **Add marketplace** with `Drinkwater32/agent-office`, then **Add plugin**.
 
 **Update later:**
 
@@ -77,12 +111,13 @@ claude plugin marketplace remove agent-office
 answers nothing without it, so no other web page or program can use it. It stops working when the session ends; don't
 share it.
 
-**Prefer the terminal?** `/office-pane` opens the office in a pane beside the chat, where your Claude Code shows panes.
+**Prefer the terminal?** `/office-pane` opens a compact text view beside the chat: who's working, the inbox and your
+usage. The pixel office, the chat and the conference room are in the browser.
 
-## Customize
+## Make it yours
 
-The config is one JSON file. Create a starter with `/office-config`, edit it, then run `/office-config` again to apply
-it (an open browser window reloads by itself).
+**Where the settings live:** one file, `office.config.json`, for every project on this computer (it is not per
+project):
 
 | OS | Where the file lives |
 | --- | --- |
@@ -90,8 +125,67 @@ it (an open browser window reloads by itself).
 | macOS, Linux | `~/.claude/agent-office/office.config.json` |
 | Any, when `CLAUDE_CONFIG_DIR` is set | `$CLAUDE_CONFIG_DIR/agent-office/office.config.json` |
 
-Every field is optional. A missing or invalid field falls back to its default, and `/office-config` lists what it
-skipped and why. A full example (the `//` notes are for reading here; JSON has no comments, so leave them out of your
+**To edit it:** run `/office-config` once to create a starter file, edit it, then run `/office-config` again. That
+applies it right away (an open office window redraws itself) and lists anything it skipped and why. A new session
+reads it too. Department changes reach Claude's meeting tool in the next session.
+
+Paste only the parts you want to change; everything you leave out keeps its default. The pieces:
+
+**You:** your name and your character's look.
+
+```json
+"owner": { "name": "Sam", "look": { "skin": "tan", "hair": "#2a1c14", "style": "curls", "top": "#14b8a6", "glasses": true } }
+```
+
+Where you sit is fixed for now: your own office, beside the lobby.
+
+**Claude at the front desk:** its look. Its name stays "Claude".
+
+```json
+"claude": { "look": { "style": "bun", "hair": "#1d140f", "top": "#3b82f6", "headphones": "#f4c542" } }
+```
+
+**Departments:** one to eight rooms. Rename, recolor, add or remove them. `agentTypes` sends every agent of that type
+to that room; otherwise an agent goes to the department whose `keywords` its task mentions most (or set
+`"routing": "round-robin"` to take turns).
+
+```json
+"departments": [
+  { "name": "Backend", "color": "#3b82f6", "agentTypes": ["general-purpose"], "keywords": ["api", "database", "fix"] },
+  { "name": "Frontend", "color": "#ec4899", "keywords": ["ui", "css", "page"] },
+  { "name": "QA", "color": "#ef4444", "keywords": ["test", "review", "audit"] },
+  { "name": "Research", "agentTypes": ["Explore", "Plan"] }
+]
+```
+
+**The crew and the pets:** up to 12 teammates (a name, `""` for an unnamed one, or a name with a look) and up to 4
+pets. `[]` for none.
+
+```json
+"staff": ["Ada", "Grace", { "name": "Linus", "look": { "style": "beanie", "hat": "#e4572e", "beard": true } }, ""],
+"pets": [{ "name": "Waffles", "coat": "short", "color": "white" }, { "name": "Pepper", "coat": "long", "color": "brown" }]
+```
+
+**The lo-fi soundtrack:** `false` removes the Lo-fi button. When shown, it always starts off: it plays only after
+you click it (browsers don't allow sound before a click anyway).
+
+```json
+"soundtrack": { "enabled": false }
+```
+
+**The handoff file:** on by default, at `.agent-office/HANDOFF.md` in the project. Point it elsewhere (relative to the
+project, or absolute), or `""` to turn it off. `warnAt` and `closeAt` are the usage percentages for the warning (and the
+handoff) and for closing the office.
+
+```json
+"usage": { "warnAt": 85, "closeAt": 98, "handoffFile": "docs/HANDOFF.md" }
+```
+
+Also: `"openOnStart": false` (don't open the window as each session starts), `"seasons": false` (no holiday decor),
+and `"deadline": { "label": "Launch", "at": "2026-12-01T17:00" }` (a countdown on the whiteboard).
+
+**Everything at once.** Every field is optional. A missing or invalid field falls back to its default, and
+`/office-config` lists what it skipped and why. A full example (the `//` notes are for reading here; JSON has no comments, so leave them out of your
 file):
 
 ```jsonc
@@ -100,6 +194,7 @@ file):
     "name": "Sam",                              // up to 16 letters, digits, spaces and . ' & -  (default "You")
     "look": { "skin": "light", "hair": "#3b2a20", "style": "crop", "top": "#5b6b8c", "glasses": true }
   },
+  "claude": { "look": { "top": "#d97757", "headphones": "#d97757" } },   // Claude's look (its name stays Claude)
   "departments": [                              // 1 to 8 rooms; each agent goes to one, by `routing`
     { "name": "Engineering", "color": "#7c3aed",
       "agentTypes": ["general-purpose"],        // an agent of this type always comes here
@@ -110,13 +205,13 @@ file):
   "routing": "match",                           // "match" (types, then keywords, then in turn) or "round-robin"
   "staff": ["Ada", "Grace", { "name": "", "look": { "style": "curls" } }],   // up to 12; "" is an unnamed teammate
   "pets": [                                     // up to 4; [] for none
-    { "name": "Biscuit", "coat": "short", "color": "orange" },
-    { "name": "Mochi", "coat": "long", "color": "cream" }
+    { "name": "Waffles", "coat": "short", "color": "white" },
+    { "name": "Pepper", "coat": "long", "color": "brown" }
   ],
   "usage": {
     "warnAt": 90,                               // % of a usage window: red gauge, and Claude writes the handoff
     "closeAt": 98,                              // %: the office closes until the window resets
-    "handoffFile": "HANDOFF.md"                 // relative to the project folder, or absolute; "" for no handoff
+    "handoffFile": ".agent-office/HANDOFF.md"   // relative to the project folder, or absolute; "" for no handoff
   },
   "deadline": { "label": "Launch", "at": "2026-12-01T17:00" },   // a countdown on the whiteboard (your local time)
   "seasons": true,                              // Halloween, Thanksgiving and holiday decor by the date
@@ -127,7 +222,7 @@ file):
 
 The values each field takes:
 
-- **look** (owner and staff): `skin` (`fair`, `light`, `tan`, `brown`, `deep`); `style` (`crop`, `curls`, `bun`,
+- **look** (owner, Claude and staff): `skin` (`fair`, `light`, `tan`, `brown`, `deep`); `style` (`crop`, `curls`, `bun`,
   `beanie`, `cap`, `long`, `lob`, `buzz`, `swoop`, `puffs`, `twists`); colors `hair`, `top`, `pants`, `shoes`, `hat`,
   `headphones` as `#rrggbb`; `glasses` (`true`, `false` or `"clear"`); `beard` and `knit` (`true` or `false`).
 - **departments**: `name` up to 16 characters, `color` as `#rrggbb`, up to 16 `agentTypes` (`Explore`, `Plan`,
@@ -144,7 +239,7 @@ The values each field takes:
 | Command | What it does |
 | --- | --- |
 | `/office` | Opens the office in your browser, with the chat. Asking Claude to "open the office" does the same. |
-| `/office-pane` | Opens the office in a pane beside the chat instead (the conference room is in the browser window only). |
+| `/office-pane` | A compact text view beside the chat: who's working, the inbox and your usage. The pixel office is in the browser. |
 | `/office-config` | Creates a starter config if you have none, reads it again, and lists what it holds and what it skipped. |
 | `/office-meeting [topic]` | Calls a meeting in the conference room. No topic: "Our priorities for the next week". |
 | `/office-usage` | Lists your usage windows, the context window, the thresholds, and whether the office is open. |
@@ -156,17 +251,21 @@ find it on the floor.
 **Meetings:** call one with `/office-meeting Ship the search feature`, with **Call a meeting** in the front desk's
 **Meeting** tab, or with the plate on the conference room's screen. Claude chairs: each department presents a
 proposal, they discuss, and Claude records the decisions. The attendees walk in and sit, the speaker's words show in a
-bubble, and the Meeting tab keeps the transcript. To speak, turn on **Say in meeting** above the chat box: your message
-reaches Claude as your line in the meeting. One meeting at a time.
+bubble, and the Meeting tab keeps the transcript. The room plays a meeting at a reading pace however fast Claude runs
+it: everyone sits down before the first word, each bubble stays up long enough to read, and the decisions stay on the
+screen before they walk out. The transcript shows every line at once. To speak, turn on **Say in meeting** above the
+chat box: your message reaches Claude as your line in the meeting. One meeting at a time.
 
 **The gauge** (beside the title, and on the pane's first line): your 5-hour usage window's percentage and when it
 resets, then this session's context window. Each number turns amber 15 points before `warnAt` and red at it. At
-`warnAt`, Claude is asked once to rewrite the handoff file from scratch (never append to it), so a later session can pick
-up where this one stopped. At `closeAt` the office closes: the lights go down, the staff go home, and a sign at the door
+`warnAt`, Claude is asked once to rewrite the handoff file (`.agent-office/HANDOFF.md` in the project) from scratch
+(never append to it), so a later session can pick up where this one stopped. Add `.agent-office/` to your
+`.gitignore` if you don't want it committed. At `closeAt` the office closes: the lights go down, the staff go home, and a sign at the door
 says when it opens again. The numbers appear after Claude's first reply on a subscription plan.
 
 **The soundtrack:** the **Lo-fi** button beside the title plays a quiet loop; a mute button sits next to it while it
-plays. It is off every time the window opens and plays only after you click it; it pauses while the tab is hidden. The
+plays. It is off every time the window opens and plays only after you click it; once on, it keeps playing when you
+switch to another window or tab, until you turn it off or mute it. The
 loop (`popout/lofi.wav`) is generated from scratch by the included script, `tools/make_lofi.py` (no samples or recordings),
 so it is this project's own and ships under the same MIT license. Run `python tools/make_lofi.py` to make it again.
 
@@ -216,7 +315,6 @@ half a second; a short click still does what it always did.
 | Egg | Trigger |
 | --- | --- |
 | The pets dance, notes rising | Long press on a pet |
-| The trophy in the lobby spins and sparkles; Claude says "Champions!" | Long press on the trophy |
 | The coffee machine overflows down the counter; someone calls for a mop | Three long presses on the kitchen's coffee machine within 30 seconds (the first two puff steam) |
 | Confetti over the whole office | Type `/confetti` at the front desk |
 | An extra life: everyone cheers with a 1UP, and the arcade cabinet plays its attract mode | The Konami code on a keyboard (up, up, down, down, left, right, left, right, B, A), anywhere but a text box |
@@ -242,7 +340,8 @@ The tool Claude runs meetings with is `mcp__agent-office__office_meeting_update`
 `attendees: [{id, name, dept, role}]` (up to 8 besides `owner` and `claude`), and `turn: {speaker_id, kind, text, title?}`
 (`kind` is `proposal`, `reply`, `question`, `decision` or `note`; `text` up to 600 characters). `dept` is `chair`,
 `owner`, or a department's name or id. Every field is checked and capped; a turn by someone not attending is refused,
-and the reply never repeats a turn's words.
+and the reply never repeats a turn's words. The room animates the turns at a reading pace (`popout/meetplay.js`), so
+Claude can send them as fast as it likes.
 
 ## License
 

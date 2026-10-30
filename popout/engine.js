@@ -1637,20 +1637,6 @@
   }
   const isBox = (a, n) => Array.isArray(a) && a.length === n && a.every(v => typeof v === 'number' && Number.isFinite(v))
   const EGGS = {
-    // the lobby's trophy turns on its plinth, catching the light
-    trophy() {
-      const t = document.getElementById('nr-trophy')
-      if (!t || !once('trophy', 2.6)) return false
-      const cx = typeof EGG.trophyX === 'number' ? EGG.trophyX : 221
-      tween(2.2, k => {
-        const sx = Math.cos(k * Math.PI * 6)
-        t.setAttribute('transform', `translate(${cx} 0) scale(${sx.toFixed(3)} 1) translate(${-cx} 0)`)
-      }, () => t.removeAttribute('transform'))
-      const z = EGG.press && isBox(EGG.press.trophy, 4) ? EGG.press.trophy : null
-      if (z) for (let i = 0; i < 5; i++) later(0.3 + i * 0.4, () => float('spark', Math.round(rnd(z[0] + 2, z[2] - 2)), Math.round(rnd(z[1] + 1, z[1] + 12)), { dur: 0.8, rise: 2 }))
-      if (!shut) later(1.2, () => claudeSays('Champions!', 2.4))
-      return true
-    },
     // the arcade cabinet's attract mode: five seconds of a chase across its screen, a flash, the marquee blinking
     arcade() {
       const A = EGG.arcade
@@ -1771,6 +1757,7 @@
   const mtg = new Map()                              // attendee id -> { id, kind, w, seat, own, from, color }
   let mtgWant = null
   let mtgSpeaker = null
+  let mtgCount = 0                                   // how many of the attendees asked for can come
   let halo = null
   function mtgSeated(m) {
     const w = m.w
@@ -1897,6 +1884,7 @@
       if (a) m.color = a.color
     }
     for (const a of want.values()) if (!mtg.has(a.id)) mtgJoin(a, instant)
+    mtgCount = [...want.keys()].filter(id => mtg.has(id)).length
     mtgSpeaker = on && st.speaker && mtg.has(st.speaker) ? st.speaker : null
   }
   function meetTick() {
@@ -1939,6 +1927,11 @@
       halo.arrow.setAttribute('transform', tr)
     }
   }
+  // whether everyone in the meeting has sat down (conference.js waits for it before the first word); closed, yes
+  function meetReady() {
+    if (shut) return true
+    return mtg.size >= mtgCount && [...mtg.values()].every(m => m.w.seated)
+  }
   // where a seated attendee's head is, in art pixels (conference.js's bubble): null while they walk
   function meetPos(id) {
     const m = mtg.get(id)
@@ -1956,6 +1949,7 @@
   window.__aoOffice = {
     meet: meetApply,
     meetPos,
+    meetReady,
     egg(name) { return Object.prototype.hasOwnProperty.call(EGGS, name) ? EGGS[name]() : false },
     dance() { return cats.dance ? cats.dance() : false },
     // where a pet is drawn now, in art pixels: its feet's middle and its frame's size (for a long press on it)

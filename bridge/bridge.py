@@ -61,6 +61,7 @@ FILES = {
     'meeting.js': (JS, 'run'),
     'engine.js': (JS, 'static'),
     'frontdesk.js': (JS, 'static'),
+    'meetplay.js': (JS, 'static'),
     'conference.js': (JS, 'static'),
     'extras.js': (JS, 'static'),
     'lofi.js': (JS, 'static'),

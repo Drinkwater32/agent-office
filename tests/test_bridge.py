@@ -147,7 +147,7 @@ class BridgeTest(unittest.TestCase):
             self.assertEqual(f.read(4), b'RIFF')
 
     def test_the_new_files_are_listed(self):
-        for name in ('meeting.js', 'conference.js', 'extras.js'):
+        for name in ('meeting.js', 'meetplay.js', 'conference.js', 'extras.js'):
             self.assertIn(name, bridge.FILES)
         self.assertIn('meeting.js', bridge.RUN_FILES)
 

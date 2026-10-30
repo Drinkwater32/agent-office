@@ -11,7 +11,7 @@ import { BOARD } from './board'
 import type { Season } from './clock'
 import { seasonOf } from './clock'
 import type { HairStyle, Look, OfficeConfig, Pet, PetColor, Skin } from './config'
-import { STYLES as STYLE_LIST, defaultConfig } from './config'
+import { DEFAULT_CLAUDE_LOOK, STYLES as STYLE_LIST, defaultConfig } from './config'
 import { EGG_CODES } from './eggs'
 import type { CatFrame, Crew, Dept, Plan, Pt } from './plan'
 import { AH, CONF, DY, SHIFT, buildPlan, coatBuild, deskTop, homeY, inkOn, seatX } from './plan'
@@ -508,8 +508,7 @@ function petLook(p: Pet): CatLook {
 }
 
 // -- the people
-const CLAUDE: Look = { skin: 'light', hair: '#6b3b22', style: 'crop', hoodie: '#d97757', phones: '#d97757',
-  pants: '#3a3550', shoes: '#f1ede6' }
+const claudeLook = (): Look => P.cfg.claude?.look ?? DEFAULT_CLAUDE_LOOK
 const named = (who: Crew) => `<title>${who.name ? esc(who.name) : 'A teammate'}</title>`
 const HAIRS = ['#1d140f', '#2a1c14', '#4a2e1c', '#7a4322', '#8f3f1e', '#d9b36a', '#b8864b', '#4fd1c5', '#a78bfa',
   '#2a1c14', '#4a2e1c']
@@ -1471,8 +1470,8 @@ function den(typing: boolean, items: Item[]): string {
   return s
 }
 
-// -- the lobby: the neon sign, the TV, the front desk by the entrance where Claude sits, a coffee cart, a trophy,
-// the sitting corner
+// -- the lobby: the neon sign, the TV, the front desk by the entrance where Claude sits, a coffee cart, the sitting
+// corner
 function lobby(o: { claudeHere: boolean; typing: boolean; inbox: number; onBreak: boolean }, items: Item[],
   over: string[]): string {
   const r: Room = { x: 145, y: 83, w: 92, h: 102, face: 18, wall: '#2e1065', floor: 'nr-lobby' }
@@ -1523,12 +1522,12 @@ function lobby(o: { claudeHere: boolean; typing: boolean; inbox: number; onBreak
   let front = ''
   if (o.claudeHere) {
     const cx = 188
-    const f = figure(cx - 6, 108, CLAUDE, 'front', [ARMS])
-    front += `<g><title>Claude, at the front desk</title>${f.body}${blink(cx - 6, 108, CLAUDE, 3)}</g>`
+    const f = figure(cx - 6, 108, claudeLook(), 'front', [ARMS])
+    front += `<g><title>Claude, at the front desk</title>${f.body}${blink(cx - 6, 108, claudeLook(), 3)}</g>`
     if (o.typing || MODE === 'page') {
       let hands = ''
       for (const [hx, ph] of [[cx - 5, 0], [cx + 3, 0.18]]) {
-        hands += `<rect x="${hx}" y="122" width="2" height="1" fill="${skinOf(CLAUDE.skin)[0]}">${anim('y', '122;121;122', 0.36, ph)}</rect>`
+        hands += `<rect x="${hx}" y="122" width="2" height="1" fill="${skinOf(claudeLook().skin)[0]}">${anim('y', '122;121;122', 0.36, ph)}</rect>`
       }
       front += g(hands, ' class="nr-typing"')
     }
@@ -1559,22 +1558,13 @@ function lobby(o: { claudeHere: boolean; typing: boolean; inbox: number; onBreak
       `${anim('y', '110;103', 2, i * 0.6)}${anim('opacity', '.8;0', 2, i * 0.6)}</rect>`
   }
   items.push({ z: 126, s: cart + shadow(217, 127, 18, 1) })
-  // the trophy on its plinth, catching the light
-  items.push({ z: 150, s: art(b => {
-    block(b, 214, 140, 14, 3, 7, '#4c2a85', '#2e1065')
-    fill(b, 219, 145, 8, 1, '#c4b5fd')
-  }) + `<g id="nr-trophy">${art(b => stamp(b, 216, 126, ['.GGGGGGGG.', 'GgGGGGGGgG', 'G.GGWGGG.G', 'G.GGGGGG.G', '.GGGGGGGG.',
-    '..GGGGGG..', '...GGGG...', '....GG....', '....GG....', '...gGGg...', '..GGGGGG..', '..gggggg..'],
-  { G: '#f4c542', g: '#c9962a', W: '#fff7d1' }))}</g>` +
-    `<rect x="220" y="128" width="1" height="2" fill="#ffffff">${anim('opacity', '0;1;0', 2.6)}</rect>` +
-    `<ellipse cx="221" cy="133" rx="9" ry="8" fill="url(#nr-warm)"/>` + shadow(214, 150, 14, 1) })
   // the lounge: a rug, the beanbag, a plant; Claude here on a break
   s += `<ellipse cx="210" cy="172" rx="18" ry="7" fill="#5b3fa8" opacity=".55"/>`
   const bag = beanbag(201, 166, '#7c3aed')
   let lounge = shadow(201, 175, 17, 1) + bag.back
   if (o.onBreak) {
-    const f = figure(203, 153, CLAUDE, 'front', [ARM_L], [SIP_DOWN, SIP_UP])
-    lounge += `<g><title>Claude, on a break</title>${f.body}${blink(203, 153, CLAUDE, 4)}` +
+    const f = figure(203, 153, claudeLook(), 'front', [ARM_L], [SIP_DOWN, SIP_UP])
+    lounge += `<g><title>Claude, on a break</title>${f.body}${blink(203, 153, claudeLook(), 4)}` +
       `<g>${steps(6, [[0, 1], [4.4, 0]])}${f.parts[0]}</g><g opacity="0">${steps(6, [[0, 0], [4.4, 1]])}${f.parts[1]}</g></g>`
     for (let i = 0; i < 2; i++) {
       lounge += `<rect x="${214 + i}" y="166" width="1" height="1" fill="#ffffff" opacity="0">` +
@@ -1788,15 +1778,15 @@ function scene(list: Staffer[], now: number): string {
     const ago = recent!.endedAt ? (now - recent!.endedAt) / 1000 : 9
     const x = visit.cx - 8
     const feet = visit.dt + 16
-    const f = figure(x, feet - 20, CLAUDE, 'front', [ARMS])
-    const b = figure(x, feet - 20, CLAUDE, 'back', [ARMS])
+    const f = figure(x, feet - 20, claudeLook(), 'front', [ARMS])
+    const b = figure(x, feet - 20, claudeLook(), 'back', [ARMS])
     const walk = 1.2
     let c = ''
     if (ago < walk) {
       c += `<g><animateTransform attributeName="transform" type="translate" values="0 14;0 0" dur="${walk}s" begin="${-ago}s" fill="freeze"/>` +
         `<g>${b.body}<set attributeName="opacity" to="0" begin="${(walk - ago).toFixed(2)}s"/></g>` +
         `<g opacity="0">${f.body}<set attributeName="opacity" to="1" begin="${(walk - ago).toFixed(2)}s"/></g></g>`
-    } else c += f.body + blink(x, feet - 20, CLAUDE, 2)
+    } else c += f.body + blink(x, feet - 20, claudeLook(), 2)
     items.push({ z: feet, s: `<g><title>Claude</title>${shadow(x + 2, feet, 8, 1)}${c}</g>` })
     over.push(speech(visit.cx - 2, feet - 20, 'Nice work', visit.cx - 30, visit.cx + 30))
     const fly = 1.4
@@ -1818,7 +1808,7 @@ function scene(list: Staffer[], now: number): string {
   if (page) {                                                   // everyone's frames, for the engine
     for (const c of P.crew) defs += spriteDefs(c.id, c.look, ALL_FRAMES)
     for (const d of P.depts) defs += spriteDefs(`g-${d.id}`, agentLook(`generic-${d.id}`, d.color), WALK_FRAMES)
-    defs += spriteDefs('owner', P.cfg.owner.look, WALK_FRAMES) + spriteDefs('claude', CLAUDE, WALK_FRAMES)
+    defs += spriteDefs('owner', P.cfg.owner.look, WALK_FRAMES) + spriteDefs('claude', claudeLook(), WALK_FRAMES)
     for (const p of P.pets) defs += catDefs(`p${p.i}`, petLook(p), p.i)
   }
   s = s.replace('</defs>', defs + '</defs>')
@@ -1873,10 +1863,9 @@ export function layoutCfg(key: string): unknown {
     // the easter eggs (README's "Spoilers"): the codes the front desk keeps for itself, and where things are
     eggs: {
       codes: EGG_CODES,
-      press: { trophy: [234 + OX, 133, 249 + OX, 156], coffee: [285 + OX, 11, 297 + OX, 25] },
+      press: { coffee: [285 + OX, 11, 297 + OX, 25] },
       coffee: { spout: [290 + OX, 20], counter: 33 },
       arcade: { screen: [265 + OX, 121, 7, 5], marquee: [263 + OX, 116, 11, 3] },
-      trophyX: 221,
     },
   }
 }
@@ -2051,7 +2040,8 @@ export function pageHtml(list: Staffer[], now: number, ver: string, where: strin
     `<button class="send" id="fd-send" type="submit"><span data-px="Send">Send</span></button></div></form>` +
     `<p class="off" id="fd-off">Read-only: chatting needs the local bridge. Run /office in Claude Code.</p></aside></div>` +
     `<script src="${src('layout.js')}"></script><script src="${src('engine.js')}"></script>` +
-    `<script src="${src('frontdesk.js')}"></script><script src="${src('conference.js')}"></script>` +
+    `<script src="${src('frontdesk.js')}"></script><script src="${src('meetplay.js')}"></script>` +
+    `<script src="${src('conference.js')}"></script>` +
     `<script src="${src('extras.js')}"></script><script src="${src('lofi.js')}"></script></body></html>`
 }
 

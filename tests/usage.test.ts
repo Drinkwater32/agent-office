@@ -58,22 +58,23 @@ test('the readout colors by the thresholds: amber from 15 under the warning, red
 })
 
 test('the handoff prompt rewrites the one file whole, never appends', async () => {
-  const p = U.handoffPrompt(at(91)[0]!, NOW, 'HANDOFF.md', '/work/app/HANDOFF.md')
-  expect(p).toMatch(/REWRITE the handoff file `HANDOFF.md` \(\/work\/app\/HANDOFF.md\)/)
+  const p = U.handoffPrompt(at(91)[0]!, NOW, '.agent-office/HANDOFF.md', '/work/app/.agent-office/HANDOFF.md')
+  expect(p).toMatch(/REWRITE the handoff file `\.agent-office\/HANDOFF.md` \(\/work\/app\/\.agent-office\/HANDOFF.md\)/)
+  expect(p).toMatch(/create its folder/)
   expect(p).toMatch(/never append/)
   expect(p).toMatch(/Handoff saved/)
   expect(U.HANDOFF_REPLY.test('Done. Handoff saved.')).toBe(true)
 })
 
 test("the config's usage thresholds and handoff file are checked", async () => {
-  expect(parseConfig(undefined).config.usage).toEqual({ warnAt: 90, closeAt: 98, handoffFile: 'HANDOFF.md' })
+  expect(parseConfig(undefined).config.usage).toEqual({ warnAt: 90, closeAt: 98, handoffFile: '.agent-office/HANDOFF.md' })
   const ok = parseConfig(JSON.stringify({ usage: { warnAt: 80, closeAt: 95, handoffFile: 'docs/handoff.md' } }))
   expect(ok.config.usage).toEqual({ warnAt: 80, closeAt: 95, handoffFile: 'docs/handoff.md' })
   expect(ok.warnings.length).toBe(0)
   const bad = parseConfig(JSON.stringify({ usage: { warnAt: 99, closeAt: 60, handoffFile: '../../etc/passwd' } }))
-  expect(bad.config.usage).toEqual({ warnAt: 90, closeAt: 98, handoffFile: 'HANDOFF.md' })
+  expect(bad.config.usage).toEqual({ warnAt: 90, closeAt: 98, handoffFile: '.agent-office/HANDOFF.md' })
   expect(bad.warnings.length).toBe(2)
-  expect(parseConfig(JSON.stringify({ usage: { handoffFile: 'notes.exe' } })).config.usage.handoffFile).toBe('HANDOFF.md')
+  expect(parseConfig(JSON.stringify({ usage: { handoffFile: 'notes.exe' } })).config.usage.handoffFile).toBe('.agent-office/HANDOFF.md')
   expect(parseConfig(JSON.stringify({ usage: { handoffFile: '' } })).config.usage.handoffFile).toBe('')
   expect(parseConfig(JSON.stringify({ usage: { warnAt: 90.5 } })).warnings[0]).toMatch(/whole number/)
 })

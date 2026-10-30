@@ -140,7 +140,8 @@ export const pctLabel = (n: number) => `${Math.floor(n)}%`
 export function handoffPrompt(l: Limit, now: number, file: string, path: string): string {
   const r = resetOf(l)
   return `[Office] Usage is at ${pctLabel(l.percentUsed)} of the ${kindLabel(l.kind)} limit${r ? ` (resets ${whenText(r, now)})` : ''}. ` +
-    `REWRITE the handoff file \`${file}\` (${path}) from scratch with the current state: replace the whole file, never ` +
+    `REWRITE the handoff file \`${file}\` (${path}) from scratch with the current state (create its folder if it is ` +
+    'missing): replace the whole file, never ' +
     "append to it, and don't make a new dated copy. Cover what is running (agents, branches), what's done, what's next, " +
     "and anything that needs the user. Then reply 'Handoff saved.'"
 }

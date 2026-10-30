@@ -48,3 +48,16 @@ test('the pane leads with the usage gauge, and says when the office is closed', 
   expect((await ui.find({ type: 'Text', text: /^5-hour 99%$/ }))?.text).toBe('5-hour 99%')
   await ui.unmount()
 })
+
+test('a handed-back report is labelled as one, never read as someone still working', async ($, on) => {
+  const done = { id: 'x2', task: 'List and describe folder files', desk: 'd3', isDone: true, isFailed: false,
+    startedAt: NOW - 20_000, endedAt: NOW - 5_000 }
+  on('clock.now', () => ({ value: NOW }))
+  on('state.get', (_, e) => (e.key === 'staff'
+    ? { value: { value: { shape: 'staff-1', value: [done] }, version: 1 } }
+    : { value: { value: undefined, version: 0 } }))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /Nobody at a desk/ }))?.text).toBe('Nobody at a desk right now')
+  expect((await ui.find({ type: 'Text', text: /Handed back:/ }))?.text).toBe('Handed back: Research · List and describe folder files · took under 1m')
+  await ui.unmount()
+})

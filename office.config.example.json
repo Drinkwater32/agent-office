@@ -4,6 +4,9 @@
     "name": "You",
     "look": { "skin": "light", "hair": "#3b2a20", "style": "crop", "top": "#5b6b8c", "glasses": false, "beard": false }
   },
+  "claude": {
+    "look": { "skin": "light", "hair": "#6b3b22", "style": "crop", "top": "#d97757", "headphones": "#d97757" }
+  },
   "departments": [
     { "name": "Engineering", "color": "#7c3aed", "agentTypes": ["general-purpose"],
       "keywords": ["implement", "build", "fix", "bug", "refactor", "feature", "migrat"] },
@@ -22,10 +25,10 @@
     { "name": "" }
   ],
   "pets": [
-    { "name": "Cat", "coat": "short", "color": "orange" },
-    { "name": "Kitten", "coat": "long", "color": "cream" }
+    { "name": "Pixel", "coat": "short", "color": "gray" },
+    { "name": "Noodle", "coat": "long", "color": "black" }
   ],
-  "usage": { "warnAt": 90, "closeAt": 98, "handoffFile": "HANDOFF.md" },
+  "usage": { "warnAt": 90, "closeAt": 98, "handoffFile": ".agent-office/HANDOFF.md" },
   "deadline": { "label": "Launch", "at": "2026-12-01T17:00" },
   "seasons": true,
   "openOnStart": true,

@@ -8,7 +8,7 @@ test('no file is the neutral defaults', async () => {
   expect(warnings.length).toBe(0)
   expect(config.owner.name).toBe('You')
   expect(config.departments.map(d => d.name)).toEqual(['Engineering', 'Review', 'Design', 'Research'])
-  expect(config.pets.map(p => `${p.name}:${p.coat}`)).toEqual(['Cat:short', 'Kitten:long'])
+  expect(config.pets.map(p => `${p.name}:${p.coat}`)).toEqual(['Pixel:short', 'Noodle:long'])
   expect(config.staff.length).toBe(6)
 })
 
@@ -104,4 +104,12 @@ test('the soundtrack toggle is shown by default and the config can hide it', asy
   const bad = parseConfig(JSON.stringify({ soundtrack: 'loud' }))
   expect(bad.config.soundtrack).toEqual({ enabled: true })
   expect(bad.warnings[0]).toMatch(/soundtrack/)
+})
+
+test("Claude's look can be changed, its name can't", async () => {
+  expect(parseConfig(undefined).config.claude.look.hoodie).toBe('#d97757')
+  const r = parseConfig(JSON.stringify({ claude: { name: 'Hal', look: { top: '#22c55e', style: 'bun', glasses: true } } }))
+  expect(r.config.claude.look).toMatchObject({ hoodie: '#22c55e', style: 'bun', glasses: true, skin: 'light' })
+  expect(r.warnings.join(' ')).toMatch(/claude\.name: Claude keeps its name/)
+  expect(parseConfig(JSON.stringify({ claude: 'red' })).warnings[0]).toMatch(/claude: must be an object/)
 })

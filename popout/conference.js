@@ -1,9 +1,10 @@
 // The conference room: the meetings you watch. It reads the meeting the plugin writes (meeting.js) when the live list
 // says its version moved (through the bridge by fetch, which a 304 answers while it is unchanged, parsed as JSON,
 // never run; from a file by a script tag), and then:
-//   - tells the engine who attends, in which chair, and who has the floor (they walk in, sit, turn to speak);
-//   - plays each new turn in a speech bubble by the speaker, a page of about fifteen words at a time, each page on
-//     screen at least five seconds (a comfortable reading pace); a backlog shows each turn's first page only;
+//   - plays the meeting in the room at a person's pace, however fast the updates come (meetplay.js keeps the queue
+//     and the timing): the attendees walk in and sit, each turn shows in a speech bubble by the speaker long enough to
+//     read, the decisions stay on the screen, then they walk out; it tells the engine who attends, in which chair, and
+//     who has the floor; a page opened mid-meeting jumps to where the meeting is;
 //   - writes the screen at the head of the table: the proposal being presented and the agenda; the decisions after;
 //     "Call a meeting" while none is on;
 //   - keeps the transcript in a Meeting tab at the front desk, with a dot for lines not yet seen;
@@ -41,15 +42,9 @@
     return e
   }
   const isBox = (a, n) => Array.isArray(a) && a.length === n && a.every(v => typeof v === 'number' && Number.isFinite(v))
-  if (!isBox(C.screen, 4) || !isBox(C.call, 4) || !Array.isArray(C.seats)) return
-
-  // -- the pace: a bubble page holds about PAGE_WORDS words and stays at least PAGE_MIN seconds, longer for a long one
-  const PAGE_WORDS = 15
-  const PAGE_MIN = 5
-  const PACE = 3                     // words a second
-  const GAP = 0.7                    // a breath between turns
-  const HOLD = 25                    // how long a turn waits for its speaker to sit down before it goes by unspoken
-  const LINGER = 4                   // after the last word of an ended meeting, before they get up
+  if (!isBox(C.screen, 4) || !isBox(C.call, 4) || !Array.isArray(C.seats) || !window.__aoMeetPlay) return
+  const player = window.__aoMeetPlay.create()
+  const LIGHTS_OFF = 18              // seconds after the last of them leaves, the room goes dark
 
   // -- checking meeting.js: the plugin checked it already; this checks again, field by field, before anything is used
   const STATUSES = ['scheduled', 'gathering', 'in_session', 'discussion', 'wrap_up', 'ended']
@@ -97,11 +92,17 @@
   const onDark = c => mix(c, '#ffffff', 0.42)
   const onLight = c => mix(c, '#1a0f26', 0.35)
 
-  let M = null                       // the meeting, checked
+  let M = null                       // the meeting, checked, as it stands now: the panel and the transcript show it
+  let R = null                       // the meeting as the room is playing it (meetplay.js): the room and the screen
+  let inRoom = false                 // whether the attendees are (or are walking) in the room
+  let cur = null                     // the turn on the floor: { turn, pages, i, speaking }
+  let played = new Set()             // turn numbers the room has played
+  let busy = false                   // the room is still playing (or about to)
   let first = true                   // the first read of this page
   const going = () => !!(M && M.live && GOING.includes(M.status))
   const live = () => !!(M && M.live)
-  const who = id => (M ? M.people.find(p => p.id === id) : null) || { id, name: id, label: '', color: '#a78bfa' }
+  const who = id => (R ? R.people.find(p => p.id === id) : null) || (M ? M.people.find(p => p.id === id) : null) ||
+    { id, name: id, label: '', color: '#a78bfa' }
 
   // -- the panel: the meeting's title and state, the agenda, the transcript; calling one, or speaking in it
   const panel = el('section', 'meet')
@@ -226,23 +227,23 @@
   }
 
   // -- the head of the panel: the title, the state, a line of counts, the agenda with the one being presented
-  function agendaNow() {
-    if (!M || !M.agenda.length) return -1
+  function agendaNow() {              // from the room: the proposal it has reached
+    if (!R || !R.agenda.length || !M || M.id !== R.id) return -1
     const props = M.turns.filter(t => t.kind === 'proposal' && (played.has(t.n) || (cur && cur.turn.n === t.n)))
     const last = cur && cur.turn.kind === 'proposal' ? cur.turn : props[props.length - 1]
     if (!last) return -1
     const ti = (last.title || '').toLowerCase()
-    const byTitle = M.agenda.findIndex(a => a.title.toLowerCase() === ti)
+    const byTitle = R.agenda.findIndex(a => a.title.toLowerCase() === ti)
     if (byTitle >= 0) return byTitle
     const lab = who(last.speaker).label
-    const byDept = M.agenda.findIndex(a => a.label && a.label === lab)
-    return byDept >= 0 ? byDept : Math.min(M.agenda.length - 1, props.length - 1)
+    const byDept = R.agenda.findIndex(a => a.label && a.label === lab)
+    return byDept >= 0 ? byDept : Math.min(R.agenda.length - 1, props.length - 1)
   }
   let headSig = ''
   function header() {
     const now = agendaNow()
     const hs = JSON.stringify([M && M.id, M && M.title, M && M.status, M && M.live, M && M.turns.length, M && M.people.length,
-      M && M.agenda.length, now, going(), CAN_SEND])
+      M && M.agenda.length, now, going(), CAN_SEND, M && R && M.id === R.id && R.status])
     if (hs === headSig) return
     headSig = hs
     titleEl.textContent = M ? M.title : 'Conference room'
@@ -253,13 +254,14 @@
     const d = M ? M.turns.filter(t => t.kind === 'decision').length : 0
     sub.textContent = M ? [`${M.people.length} attending`, `${n} turn${n === 1 ? '' : 's'}`, `${d} decision${d === 1 ? '' : 's'}`].join(' · ') : ''
     sub.hidden = !M
+    const roomOn = !!(R && M && R.id === M.id && GOING.includes(R.status))     // the room is still playing it
     agendaEl.replaceChildren(...(M ? M.agenda : []).map((a, i) => {
-      const li = el('li', 'mt-ag' + (i === now && going() ? ' now' : i < now || (!going() && M.status === 'ended') ? ' done' : ''))
+      const li = el('li', 'mt-ag' + (i === now && roomOn ? ' now' : i < now || (!roomOn && M.status === 'ended') ? ' done' : ''))
       const dot = el('i', '', li)
       dot.style.background = a.color
       el('b', '', li, a.label)
       el('span', '', li, a.title)
-      el('em', '', li, i === now && going() ? '●' : i < now || (M && M.status === 'ended') ? '✓' : '')
+      el('em', '', li, i === now && roomOn ? '●' : i < now || (!roomOn && M && M.status === 'ended') ? '✓' : '')
       return li
     }))
     agendaEl.hidden = !(M && M.agenda.length)
@@ -297,9 +299,9 @@
   function drawScreen() {
     if (!screen) return
     const now = agendaNow()
-    const prop = cur && cur.turn.kind === 'proposal' && cur.turn.title ? cur.turn.title : now >= 0 && M ? M.agenda[now].title : ''
-    const state = !M ? 'none' : !M.live ? 'ended' : M.status
-    const sig = JSON.stringify([state, M && M.title, prop, now, M && M.decisions, M && M.agenda.length])
+    const prop = cur && cur.turn.kind === 'proposal' && cur.turn.title ? cur.turn.title : now >= 0 && R ? R.agenda[now].title : ''
+    const state = !R ? 'none' : R.status
+    const sig = JSON.stringify([state, R && R.title, prop, now, R && R.decisions, R && R.agenda.length, live()])
     if (sig === screenSig) return
     screenSig = sig
     for (const c of [...screen.childNodes]) if (c.nodeName !== 'clipPath') c.remove()
@@ -313,7 +315,7 @@
     }
     plate = false
     if (state === 'none' || state === 'ended') {
-      const ds = M ? M.decisions : []
+      const ds = R ? R.decisions : []
       if (ds.length) {
         t(2, 4.4, 2.5, '#5ef08a', 'DECISIONS', '', 1)
         t(SW - 2, 4.4, 2.3, '#8f86b3', String(ds.length), 'end', 1)
@@ -324,9 +326,9 @@
         })
       } else {
         t(SW / 2, 6, 3, '#c4b5fd', 'CONFERENCE', 'middle', 1)
-        t(SW / 2, 11, 2.4, '#8f86b3', M ? 'NO MEETING ON' : 'NO MEETING YET', 'middle')
+        t(SW / 2, 11, 2.4, '#8f86b3', R ? 'NO MEETING ON' : 'NO MEETING YET', 'middle')
       }
-      if (CAN_SEND) {
+      if (CAN_SEND && !live()) {
         plate = true
         const [x0, y0, x1, y1] = C.call
         const px = x0 - C.screen[0]
@@ -339,24 +341,24 @@
     }
     if (state === 'scheduled') {
       t(SW / 2, 4.6, 2.5, '#fbbf24', 'MEETING CALLED', 'middle', 1)
-      wrapText(M.title, 23, 2).forEach((l, i) => t(SW / 2, 10 + i * 3.8, 3, '#f3efff', l, 'middle', 1))
+      wrapText(R.title, 23, 2).forEach((l, i) => t(SW / 2, 10 + i * 3.8, 3, '#f3efff', l, 'middle', 1))
       t(SW / 2, 18.6, 2.2, '#8f86b3', 'GATHERING SOON', 'middle')
       return
     }
     const word = { gathering: 'TAKING SEATS', in_session: 'NOW PRESENTING', discussion: 'DISCUSSION', wrap_up: 'WRAP-UP' }[state] || ''
     t(2, 4.2, 2.3, state === 'wrap_up' ? '#5ef08a' : '#fbbf24', word, '', 1)
-    if (M.agenda.length) t(SW - 2, 4.2, 2.3, '#8f86b3', `${Math.max(0, now) + 1}/${M.agenda.length}`, 'end', 1)
+    if (R.agenda.length) t(SW - 2, 4.2, 2.3, '#8f86b3', `${Math.max(0, now) + 1}/${R.agenda.length}`, 'end', 1)
     mk('rect', { x: 2, y: 5.4, width: SW - 4, height: 0.4, fill: '#2f3a63' }, g)
-    if (state === 'wrap_up' && M.decisions.length) {
-      M.decisions.slice(-3).forEach((d, i) => {
+    if (state === 'wrap_up' && R.decisions.length) {
+      R.decisions.slice(-3).forEach((d, i) => {
         mk('rect', { x: 2, y: 7.4 + i * 3.7, width: 1.4, height: 1.4, fill: '#5ef08a' }, g)
         t(4.6, 8.8 + i * 3.7, 2.2, '#e8e4f8', fit(d, 31))
       })
       return
     }
-    wrapText(prop || M.title, 23, 2).forEach((l, i) => t(2, 9.4 + i * 3.6, 3, '#ffffff', l, '', 1))
-    const from = Math.max(0, Math.min(now, M.agenda.length - 1))
-    M.agenda.slice(from, from + 1).forEach((a, k) => {
+    wrapText(prop || R.title, 23, 2).forEach((l, i) => t(2, 9.4 + i * 3.6, 3, '#ffffff', l, '', 1))
+    const from = Math.max(0, Math.min(now, R.agenda.length - 1))
+    R.agenda.slice(from, from + 1).forEach((a, k) => {
       const i = from + k
       const y = 17.6
       mk('rect', { x: 2, y: y - 1.6, width: 1.6, height: 1.6, fill: a.color }, g)
@@ -364,123 +366,60 @@
     })
   }
 
-  // -- playback: each new turn in order, paged; a page opened mid-meeting starts from the newest turn (if fresh)
-  const played = new Set()           // turn numbers already spoken (or let go) this page
-  let queue = []
-  let cur = null                     // { turn, pages, i, until, held }
-  let gapUntil = 0
-  let meetId = ''
-  let endAt = 0                      // when the people get up after an ended meeting's last word
-  let offAt = 0                      // when the lights go down after that
-  const clock = () => performance.now() / 1000
-  // pages end where sentences do when they can: about fifteen words, at most a few more to finish a sentence
-  function pagesOf(text) {
-    const flat = String(text).replace(/\s+/g, ' ').trim()
-    const sentences = flat.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) || [flat]
-    const pages = []
-    let curP = []
-    const len = ws => ws.join(' ').length
-    for (const s0 of sentences) {
-      const sw = s0.trim().split(' ').filter(Boolean)
-      if (curP.length && (curP.length + sw.length > PAGE_WORDS + 4 || len(curP) + len(sw) > 125)) {
-        pages.push(curP.join(' '))
-        curP = []
-      }
-      for (const w of sw) {
-        if (curP.length >= PAGE_WORDS + 4 || (curP.length && len(curP) + w.length > 125)) {
-          pages.push(curP.join(' '))
-          curP = []
-        }
-        curP.push(w)
-      }
-    }
-    if (curP.length) pages.push(curP.join(' '))
-    return pages.length ? pages : ['…']
-  }
-  const secs = page => Math.max(PAGE_MIN, page.split(/\s+/).length / PACE)
-  function enqueue(fresh) {
-    if (!M) return
-    if (M.id !== meetId) {
-      meetId = M.id
-      played.clear()
-      queue = []
-      cur = null
-      const s = get('ao-meet-seen').split(':')
-      seenN = s[0] === M.id ? +s[1] || 0 : 0
-    }
-    const turns = M.turns
-    if (fresh) {                                    // opened mid-meeting: what came before is in the transcript
-      const last = turns[turns.length - 1]
-      for (const t of turns) played.add(t.n)
-      if (last && going() && Date.now() - last.at < 45_000) played.delete(last.n)
-    }
-    for (const t of turns) {
-      if (played.has(t.n) || queue.some(x => x.n === t.n) || (cur && cur.turn.n === t.n)) continue
-      queue.push(t)
-    }
-  }
-  function startTurn(now) {
-    const t = queue.shift()
-    played.add(t.n)
-    cur = { turn: t, pages: pagesOf(t.text), i: 0, until: 0, held: now }
-    speaking(t.n)
+  // -- playback: meetplay.js turns each read into items and plays them at a person's pace; this asks the engine
+  // whether they have sat down, and hands the room on to the engine, the screen and the bubble. Its clock runs only
+  // while the page is in view (the walks stop when it is hidden), so a meeting held meanwhile plays on your return.
+  let offAt = 0                      // when the lights go down, once they have left
+  let playClock = 0
+  let lastTick = performance.now() / 1000
+  const roomIO = {
+    ready: () => { const o = office(); return !o || !o.meetReady || o.meetReady() },
+    seated: id => {
+      const o = office()
+      const p = R && R.people.find(x => x.id === id)
+      if (!o || !o.meetPos || !p || p.seat < 0) return true          // no chair: nothing to wait for
+      return !!o.meetPos(id)
+    },
   }
   function step() {
-    const now = clock()
-    if (cur) {
-      const pos = office() && office().meetPos ? office().meetPos(cur.turn.speaker) : null
-      const p = M && M.people.find(x => x.id === cur.turn.speaker)
-      const can = people && !!p && p.seat >= 0
-      if (!cur.until) {                            // waiting for the speaker to sit down (a speaker with no chair isn't)
-        if (pos) cur.until = now + secs(cur.pages[0])
-        else if (!can || now - cur.held > HOLD || !going()) {
-          cur = null
-          gapUntil = now
-        }
-      } else if (now >= cur.until) {
-        cur.i++
-        const behind = queue.length > 2              // a backlog: each turn's first page only (the rest is in the transcript)
-        if (cur.i < cur.pages.length && !behind) cur.until = now + secs(cur.pages[cur.i])
-        else {
-          cur = null
-          gapUntil = now + GAP
-        }
-      }
-    }
-    if (!cur && queue.length && now >= gapUntil) startTurn(now)
-    if (!cur) speaking(-1)
-    // an ended meeting: the last words, a moment, then up and out; the lights go down once they're gone
-    if ((!M || !going()) && !cur && !queue.length && people) {
-      if (!endAt) endAt = now + (M && M.status === 'ended' ? LINGER : 0)
-      if (now >= endAt) {
-        people = false
-        offAt = now + 18
-        engine()
-      }
-    }
-    if (offAt && now >= offAt && !people) {
-      offAt = 0
-      lights()
-    }
-    engineSpeaker()
+    const t = performance.now() / 1000
+    const dt = Math.min(1, Math.max(0, t - lastTick))
+    lastTick = t
+    if (!document.hidden) playClock += dt
+    const was = inRoom
+    const s = player.tick(playClock, roomIO)
+    R = s.view
+    inRoom = s.inRoom
+    cur = s.turn
+    played = s.played
+    busy = s.busy
+    if (player.takeInstant()) engine(true)
+    else engineSpeaker()
+    if (was && !inRoom) offAt = t + LIGHTS_OFF
+    if (inRoom || (offAt && t >= offAt)) offAt = 0
+    speaking(cur && cur.speaking ? cur.turn.n : -1)
+    lights()
     drawScreen()
     header()
     bubble()
   }
 
   // -- the engine: who is in the room, and who has the floor
-  let people = false                 // whether the attendees are (or are going) in the room
   let sentSig = ''
-  const sig = () => JSON.stringify([people, M && M.people.map(p => [p.id, p.seat, p.kind]), cur && cur.until ? cur.turn.speaker : null])
+  const speakerNow = () => (cur && cur.speaking ? cur.turn.speaker : null)
+  const sig = () => JSON.stringify([inRoom, R && R.people.map(p => [p.id, p.seat, p.kind]), speakerNow()])
   function engine(instant) {
     const o = office()
     if (!o || !o.meet) return
-    o.meet({ on: people && !!M, attendees: (M ? M.people : []).filter(p => p.seat >= 0).map(p => ({ id: p.id, kind: p.kind,
-      seat: p.seat, desk: p.desk, crew: p.crew, color: p.color })), speaker: cur && cur.until ? cur.turn.speaker : null }, !!instant)
+    o.meet({ on: inRoom && !!R, attendees: (R ? R.people : []).filter(p => p.seat >= 0).map(p => ({ id: p.id, kind: p.kind,
+      seat: p.seat, desk: p.desk, crew: p.crew, color: p.color })), speaker: speakerNow() }, !!instant)
     sentSig = sig()
   }
   function engineSpeaker() { if (sig() !== sentSig) engine(false) }
-  function lights() { svg.setAttribute('data-meet', live() || people || offAt ? 'on' : 'off') }
+  function lights() {
+    const v = live() || inRoom || offAt || busy || (R && R.status !== 'ended') ? 'on' : 'off'
+    if (svg.getAttribute('data-meet') !== v) svg.setAttribute('data-meet', v)
+  }
 
   // -- the bubble: by the speaker, beside the room when there is space to its west, else over their head; in real
   // type, so it reads at any size
@@ -506,7 +445,7 @@
     return { x: r.left + (px - vb.x) / vb.width * r.width, y: r.top + (py - vb.y) / vb.height * r.height, r }
   }
   function bubble() {
-    const pos = cur && cur.until && office() && office().meetPos ? office().meetPos(cur.turn.speaker) : null
+    const pos = cur && cur.speaking && office() && office().meetPos ? office().meetPos(cur.turn.speaker) : null
     const head0 = pos && !document.hidden ? where(pos.x, pos.y) : null
     if (!head0) {
       if (!bub.hidden) bub.hidden = true
@@ -561,25 +500,23 @@
   // -- reading meeting.js: when the live list's version for it moves (no reading otherwise)
   let ver = null
   let reading = false
+  let meetId = ''
   function apply(d) {
     const m = clean(d)
     const wasGoing = going()
     M = m
     const isFirst = first
-    enqueue(isFirst)
+    if (M && M.id !== meetId) {                     // a new meeting: its unread count from where this browser left it
+      meetId = M.id
+      const s0 = get('ao-meet-seen').split(':')
+      seenN = s0[0] === M.id ? +s0[1] || 0 : 0
+    }
+    player.push(M, isFirst ? { jump: true } : undefined)
     const on = going()
-    if (on && !people) {
-      people = true
-      endAt = 0
-      offAt = 0
-      engine(isFirst)
-    } else if (people) engine(false)
     if (on && !wasGoing && !isFirst && window.__aoMeetSay && desk && desk.classList.contains('tab-meet')) window.__aoMeetSay.set(true)
     if (window.__aoMeetSay) window.__aoMeetSay.live(on)
     transcript()
-    header()
-    drawScreen()
-    lights()
+    step()
     if (inView()) seen()
     else dots()
     first = false
@@ -655,7 +592,7 @@
     if (inPlate(ax, ay)) show(true)
   })
 
-  window.__aoMeetDebug = { get m() { return M }, get cur() { return cur }, get queue() { return queue }, apply, show, tab }
+  window.__aoMeetDebug = { get m() { return M }, get room() { return player.state() }, apply, show, tab }
   drawScreen()
   header()
   dots()

@@ -1,6 +1,6 @@
 {
   "name": "agent-office",
-  "owner": { "name": "agent-office contributors" },
+  "owner": { "name": "Lee Drinkwater" },
   "metadata": { "description": "A pixel-art office for Claude Code: your subagents at their desks, a chat to Claude, meetings and a usage gauge" },
   "plugins": [
     {

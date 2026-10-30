@@ -22,6 +22,7 @@ export type Staff = { name: string; look: Look }
 export type Pet = { name: string; coat: PetCoat; color: PetColor }
 export type OfficeConfig = {
   owner: { name: string; look: Look }
+  claude: { look: Look }      // Claude, at the front desk and chairing meetings: its look (its name stays Claude)
   departments: Department[]
   routing: 'match' | 'round-robin'
   staff: Staff[]
@@ -37,7 +38,7 @@ export type OfficeConfig = {
 export type UsageConfig = { warnAt: number; closeAt: number; handoffFile: string }
 // the whiteboard's countdown: a label, and a date and time on this machine's clock
 export type Deadline = { label: string; y: number; mo: number; d: number; h: number; mi: number }
-export const DEFAULT_USAGE: UsageConfig = { warnAt: 90, closeAt: 98, handoffFile: 'HANDOFF.md' }
+export const DEFAULT_USAGE: UsageConfig = { warnAt: 90, closeAt: 98, handoffFile: '.agent-office/HANDOFF.md' }
 
 export const MAX_DEPARTMENTS = 8
 export const MAX_STAFF = 12
@@ -47,21 +48,23 @@ export const MAX_FILE_BYTES = 64 * 1024
 export const PALETTE = ['#7c3aed', '#ef4444', '#f59e0b', '#14b8a6', '#3b82f6', '#ec4899', '#22c55e', '#f97316']
 
 const DEFAULT_OWNER_LOOK: Look = { skin: 'light', hair: '#3b2a20', style: 'crop', hoodie: '#5b6b8c', pants: '#2b2836' }
+export const DEFAULT_CLAUDE_LOOK: Look = { skin: 'light', hair: '#6b3b22', style: 'crop', hoodie: '#d97757', phones: '#d97757',
+  pants: '#3a3550', shoes: '#f1ede6' }
 
 // the staff when the file names none: a mixed crew, unnamed (their tooltips say "a teammate")
 export const STAFF_LOOKS: Look[] = [
   { skin: 'fair', hair: '#4a2e1c', style: 'beanie', beard: true, hoodie: '#2f4a7a', hat: '#e4572e', pants: '#b49a6a' },
   { skin: 'brown', hair: '#1d140f', style: 'puffs', hoodie: '#6f9a7a', pants: '#3d4a6b' },
   { skin: 'tan', hair: '#2a1c14', style: 'crop', beard: true, glasses: true, hoodie: '#2f6f6a', pants: '#b49a6a' },
-  { skin: 'light', hair: '#8f3f1e', style: 'curls', hoodie: '#b9a6f0', phones: '#14b8a6', pants: '#2b2836' },
+  { skin: 'light', hair: '#8f3f1e', style: 'curls', hoodie: '#e0b034', phones: '#14b8a6', pants: '#2b2836' },
   { skin: 'deep', hair: '#1d140f', style: 'twists', hoodie: '#3a3a46', pants: '#5a5866' },
-  { skin: 'fair', hair: '#d9b36a', style: 'lob', glasses: 'clear', hoodie: '#d99aa3', knit: true, pants: '#4a4560' },
+  { skin: 'fair', hair: '#b5432a', style: 'bun', hoodie: '#14b8a6', pants: '#4a4560' },
   { skin: 'light', hair: '#1d140f', style: 'cap', beard: true, hoodie: '#c8643b', hat: '#2b2533', pants: '#3d4a6b' },
   { skin: 'brown', hair: '#2a1c14', style: 'bun', hoodie: '#7d8b3c', pants: '#2b2836' },
   { skin: 'tan', hair: '#4fd1c5', style: 'long', hoodie: '#3a3a46', pants: '#5a5866' },
-  { skin: 'deep', hair: '#2a1c14', style: 'buzz', beard: true, hoodie: '#a855f7', pants: '#3d4a6b' },
+  { skin: 'deep', hair: '#2a1c14', style: 'buzz', glasses: true, hoodie: '#22c55e', pants: '#3d4a6b' },
   { skin: 'fair', hair: '#7a4322', style: 'swoop', hoodie: '#0ea5e9', pants: '#2b2836' },
-  { skin: 'light', hair: '#b8864b', style: 'long', hoodie: '#e11d48', pants: '#4a4560' },
+  { skin: 'light', hair: '#5a3220', style: 'lob', hoodie: '#e11d48', pants: '#4a4560' },
 ]
 
 export const DEFAULT_DEPARTMENTS: Department[] = [
@@ -79,10 +82,11 @@ export const DEFAULT_DEPARTMENTS: Department[] = [
 export function defaultConfig(): OfficeConfig {
   return {
     owner: { name: 'You', look: { ...DEFAULT_OWNER_LOOK } },
+    claude: { look: { ...DEFAULT_CLAUDE_LOOK } },
     departments: DEFAULT_DEPARTMENTS.map(d => ({ ...d, agentTypes: [...d.agentTypes], keywords: [...d.keywords] })),
     routing: 'match',
     staff: STAFF_LOOKS.slice(0, 6).map(look => ({ name: '', look })),
-    pets: [{ name: 'Cat', coat: 'short', color: 'orange' }, { name: 'Kitten', coat: 'long', color: 'cream' }],
+    pets: [{ name: 'Pixel', coat: 'short', color: 'gray' }, { name: 'Noodle', coat: 'long', color: 'black' }],
     usage: { ...DEFAULT_USAGE },
     seasons: true,
     openOnStart: true,
@@ -97,7 +101,7 @@ export const EXAMPLE_CONFIG = {
     keywords: d.keywords })),
   routing: 'match',
   staff: [{ name: '' }, { name: '' }, { name: '' }, { name: '' }, { name: '' }, { name: '' }],
-  pets: [{ name: 'Cat', coat: 'short', color: 'orange' }, { name: 'Kitten', coat: 'long', color: 'cream' }],
+  pets: [{ name: 'Pixel', coat: 'short', color: 'gray' }, { name: 'Noodle', coat: 'long', color: 'black' }],
   usage: { ...DEFAULT_USAGE },
   seasons: true,
   openOnStart: true,
@@ -203,7 +207,7 @@ export function parseConfig(text: string | undefined): { config: OfficeConfig; w
     return { config, warnings }
   }
   for (const k of Object.keys(raw)) {
-    if (!['owner', 'departments', 'routing', 'staff', 'pets', 'usage', 'deadline', 'seasons', 'openOnStart', 'soundtrack', '$schema', '//'].includes(k)) {
+    if (!['owner', 'claude', 'departments', 'routing', 'staff', 'pets', 'usage', 'deadline', 'seasons', 'openOnStart', 'soundtrack', '$schema', '//'].includes(k)) {
       warn(`Unknown field "${clip(k)}" ignored.`)
     }
   }
@@ -214,6 +218,17 @@ export function parseConfig(text: string | undefined): { config: OfficeConfig; w
     else {
       config.owner.name = nameOf(raw.owner.name, 16, 'owner.name', warn) ?? 'You'
       config.owner.look = lookOf(raw.owner.look, config.owner.look, 'owner.look', warn)
+      for (const k of Object.keys(raw.owner)) if (!['name', 'look'].includes(k)) warn(`owner: unknown field "${clip(k)}" ignored.`)
+    }
+  }
+  // Claude: its look (its name is always Claude)
+  if (raw.claude !== undefined) {
+    if (!isObj(raw.claude)) warn('claude: must be an object.')
+    else {
+      config.claude.look = lookOf(raw.claude.look, config.claude.look, 'claude.look', warn)
+      for (const k of Object.keys(raw.claude)) {
+        if (k !== 'look') warn(k === 'name' ? 'claude.name: Claude keeps its name; only its look changes.' : `claude: unknown field "${clip(k)}" ignored.`)
+      }
     }
   }
 
@@ -284,7 +299,7 @@ export function parseConfig(text: string | undefined): { config: OfficeConfig; w
           if (p.coat === 'short' || p.coat === 'long') coat = p.coat
           else warn(`${where}.coat: "short" or "long".`)
         }
-        let color: PetColor = coat === 'long' ? 'cream' : 'orange'
+        let color: PetColor = coat === 'long' ? 'black' : 'gray'
         if (p.color !== undefined) {
           if (PET_COLORS.includes(p.color as PetColor)) color = p.color as PetColor
           else warn(`${where}.color: one of ${PET_COLORS.join(', ')}.`)
