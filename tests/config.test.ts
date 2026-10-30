@@ -97,3 +97,11 @@ test('every department count from 1 to 8 lays out a floor where every seat can b
     for (const s of Object.values(p.cat.spots)) expect(cseen.has(s.node)).toBe(true)
   }
 })
+
+test('the soundtrack toggle is shown by default and the config can hide it', async () => {
+  expect(parseConfig(undefined).config.soundtrack).toEqual({ enabled: true })
+  expect(parseConfig(JSON.stringify({ soundtrack: { enabled: false } })).config.soundtrack).toEqual({ enabled: false })
+  const bad = parseConfig(JSON.stringify({ soundtrack: 'loud' }))
+  expect(bad.config.soundtrack).toEqual({ enabled: true })
+  expect(bad.warnings[0]).toMatch(/soundtrack/)
+})

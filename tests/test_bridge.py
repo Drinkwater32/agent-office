@@ -137,6 +137,15 @@ class BridgeTest(unittest.TestCase):
         status, out = self.emitted_by(lambda: self.post(b'plain', **{'X-Office-Mode': 'other'}))
         self.assertEqual(out, [{'msg': 'plain', 'cid': ''}])
 
+    def test_the_soundtrack_is_a_listed_static_file(self):
+        self.assertEqual(bridge.FILES['lofi.wav'], ('audio/wav', 'static'))
+        self.assertEqual(bridge.FILES['lofi.js'][1], 'static')
+        self.assertNotIn('media-src', bridge.CSP)            # fetched and decoded: connect-src 'self' covers it
+        self.assertIn("connect-src 'self'", bridge.CSP)
+        here = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'popout', 'lofi.wav')
+        with open(here, 'rb') as f:
+            self.assertEqual(f.read(4), b'RIFF')
+
     def test_the_new_files_are_listed(self):
         for name in ('meeting.js', 'conference.js', 'extras.js'):
             self.assertIn(name, bridge.FILES)

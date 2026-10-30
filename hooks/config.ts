@@ -30,6 +30,7 @@ export type OfficeConfig = {
   deadline?: Deadline
   seasons: boolean
   openOnStart: boolean       // the browser window opens as a session starts
+  soundtrack: { enabled: boolean }   // the lo-fi toggle in the window's title bar (playback always starts off)
 }
 // the usage guard: a warning (and a handoff asked of Claude) at warnAt %, the office closed at closeAt %; the handoff
 // file relative to the project's folder (or absolute), '' for no handoff prompt
@@ -85,6 +86,7 @@ export function defaultConfig(): OfficeConfig {
     usage: { ...DEFAULT_USAGE },
     seasons: true,
     openOnStart: true,
+    soundtrack: { enabled: true },
   }
 }
 
@@ -99,6 +101,7 @@ export const EXAMPLE_CONFIG = {
   usage: { ...DEFAULT_USAGE },
   seasons: true,
   openOnStart: true,
+  soundtrack: { enabled: true },
 }
 
 // -- checks
@@ -200,7 +203,7 @@ export function parseConfig(text: string | undefined): { config: OfficeConfig; w
     return { config, warnings }
   }
   for (const k of Object.keys(raw)) {
-    if (!['owner', 'departments', 'routing', 'staff', 'pets', 'usage', 'deadline', 'seasons', 'openOnStart', '$schema', '//'].includes(k)) {
+    if (!['owner', 'departments', 'routing', 'staff', 'pets', 'usage', 'deadline', 'seasons', 'openOnStart', 'soundtrack', '$schema', '//'].includes(k)) {
       warn(`Unknown field "${clip(k)}" ignored.`)
     }
   }
@@ -302,6 +305,12 @@ export function parseConfig(text: string | undefined): { config: OfficeConfig; w
   if (raw.openOnStart !== undefined) {
     if (typeof raw.openOnStart === 'boolean') config.openOnStart = raw.openOnStart
     else warn('openOnStart: true or false.')
+  }
+  if (raw.soundtrack !== undefined) {
+    const st = raw.soundtrack
+    if (isObj(st) && typeof st.enabled === 'boolean') config.soundtrack = { enabled: st.enabled }
+    else if (typeof st === 'boolean') config.soundtrack = { enabled: st }
+    else warn('soundtrack: { "enabled": true } or { "enabled": false }.')
   }
   return { config, warnings }
 }

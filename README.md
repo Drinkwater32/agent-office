@@ -8,7 +8,7 @@ A pixel-art office for Claude Code. Every subagent Claude starts walks in, takes
 there, its latest words in a bubble and its current tool on a tag. When it finishes, it walks its report to the front
 desk, where Claude sits. The office opens in your browser beside a chat with Claude: what you type there goes to your
 session as if you had typed it in the terminal. It also has a conference room where Claude runs meetings between your
-departments, a usage gauge, a whiteboard with your branches, pets, and day and night.
+departments, a usage gauge, a whiteboard with your branches, pets, day and night, and an optional lo-fi soundtrack.
 
 ![The office in a browser window, with a meeting in the conference room](docs/screenshot.png)
 
@@ -120,7 +120,8 @@ file):
   },
   "deadline": { "label": "Launch", "at": "2026-12-01T17:00" },   // a countdown on the whiteboard (your local time)
   "seasons": true,                              // Halloween, Thanksgiving and holiday decor by the date
-  "openOnStart": true                           // open the browser window as each session starts
+  "openOnStart": true,                          // open the browser window as each session starts
+  "soundtrack": { "enabled": true }             // show the Lo-fi toggle (playback always starts off); false hides it
 }
 ```
 
@@ -136,6 +137,7 @@ The values each field takes:
 - **usage**: `warnAt` a whole number from 50 to 99; `closeAt` from 51 to 100, above `warnAt`; `handoffFile` a path to
   a `.md` or `.txt` file, with no `..` in it.
 - **deadline**: `at` is `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM"` on this computer's clock. Leave it out for no countdown.
+- **soundtrack**: `{ "enabled": false }` removes the Lo-fi toggle from the window entirely.
 
 ## Using it
 
@@ -163,6 +165,11 @@ resets, then this session's context window. Each number turns amber 15 points be
 up where this one stopped. At `closeAt` the office closes: the lights go down, the staff go home, and a sign at the door
 says when it opens again. The numbers appear after Claude's first reply on a subscription plan.
 
+**The soundtrack:** the **Lo-fi** button beside the title plays a quiet loop; a mute button sits next to it while it
+plays. It is off every time the window opens and plays only after you click it; it pauses while the tab is hidden. The
+loop (`popout/lofi.wav`) is generated from scratch by the included script, `tools/make_lofi.py` (no samples or recordings),
+so it is this project's own and ships under the same MIT license. Run `python tools/make_lofi.py` to make it again.
+
 **The whiteboard** (in the conference room): up to three branches of this project's git repository, this folder's
 branch first, each marked open or merged, with a dot for each department that has an agent on it. It reads git once a
 minute and never writes to it. Set `deadline` for a countdown at the top.
@@ -188,7 +195,8 @@ minute and never writes to it. Set `deadline` for a countdown at the top.
   answers only to that exact address, so other machines and rebinding tricks can't reach it.
 - Each session has a random 256-bit key that every request needs; posting also needs the server's own origin, and there
   are no CORS headers. Pages carry a strict Content-Security-Policy, and chat text is only ever shown as text.
-- No network calls: nothing leaves your computer (no weather, no telemetry). The whiteboard runs read-only `git`
+- No network calls: nothing leaves your computer (no weather, no telemetry). The soundtrack is a file the local server
+  serves like the page's scripts. The whiteboard runs read-only `git`
   commands in your project, never through a shell.
 - What is stored: your config (`~/.claude/agent-office/`); each session's page files and the server's log
   (`~/.claude/plugins/data/agent-office/`, cleared three days after a session ends); and the usage guard's memory, in

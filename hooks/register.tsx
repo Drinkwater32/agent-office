@@ -93,7 +93,7 @@ let spriteKey = ''
 let convoKey = ''
 let convoVer = ''
 let scriptStamp = ''
-const SCRIPTS = ['engine.js', 'frontdesk.js', 'conference.js', 'extras.js']
+const SCRIPTS = ['engine.js', 'frontdesk.js', 'conference.js', 'extras.js', 'lofi.js']
 let pageSeason = ''           // the season the page was drawn in: a new one rebuilds it (its decor is in the drawing)
 
 // whether a script changed since the page was written (a stat a poll; the page is rebuilt when one did)
@@ -634,6 +634,7 @@ async function configText($: EngineInterface): Promise<string> {
     `Whiteboard countdown: ${c.deadline ? `${c.deadline.label}, ${c.deadline.y}-${String(c.deadline.mo).padStart(2, '0')}-` +
       `${String(c.deadline.d).padStart(2, '0')} ${clockText(deadlineAt(c.deadline))}` : 'none'}`,
     `Seasonal decor: ${c.seasons ? 'on' : 'off'}`,
+    `Soundtrack toggle: ${c.soundtrack.enabled ? 'shown (it starts off)' : 'hidden'}`,
     `Opens in your browser as a session starts: ${c.openOnStart ? 'yes' : 'no'}`,
   ]
   if (cfgWarnings.length) lines.push('', 'Warnings:', ...cfgWarnings.map(w => `- ${w}`))

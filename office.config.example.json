@@ -28,5 +28,6 @@
   "usage": { "warnAt": 90, "closeAt": 98, "handoffFile": "HANDOFF.md" },
   "deadline": { "label": "Launch", "at": "2026-12-01T17:00" },
   "seasons": true,
-  "openOnStart": true
+  "openOnStart": true,
+  "soundtrack": { "enabled": true }
 }

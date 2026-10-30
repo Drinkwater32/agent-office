@@ -1866,6 +1866,7 @@ export function layoutCfg(key: string): unknown {
     visit: v ? { who: v.id, spots: { side: 'den-owner', perch: 'den-perch' } } : null,
     clock: [293 + OX, 11],
     chatter: CHATTER,
+    soundtrack: P.cfg.soundtrack.enabled,                       // the lo-fi toggle shown (playback always starts off)
     door: [207 + OX, 158],                                       // where the CLOSED sign stands, in front of the entrance
     conf: { seats: P.confSeats, from: P.confFrom, screen: cg.screen, call: cg.call },
     board: { at: cg.board },
@@ -2051,7 +2052,7 @@ export function pageHtml(list: Staffer[], now: number, ver: string, where: strin
     `<p class="off" id="fd-off">Read-only: chatting needs the local bridge. Run /office in Claude Code.</p></aside></div>` +
     `<script src="${src('layout.js')}"></script><script src="${src('engine.js')}"></script>` +
     `<script src="${src('frontdesk.js')}"></script><script src="${src('conference.js')}"></script>` +
-    `<script src="${src('extras.js')}"></script></body></html>`
+    `<script src="${src('extras.js')}"></script><script src="${src('lofi.js')}"></script></body></html>`
 }
 
 // The style of what conference.js and extras.js add to the page (the page's CSP allows no style but this file): the
@@ -2139,6 +2140,13 @@ color:#2b2342;box-shadow:0 0 0 2px #1a0f26,0 8px 18px #0008;font:600 13.5px/1.38
 .ro-bar i{display:block;height:100%;background:#a99fd0}.ro-main.amber .ro-bar i{background:#fbbf24}.ro-main.red .ro-bar i{background:#f87171}
 @media (min-width:1100px){body.desk-closed .ro{margin-right:78px}}
 @media (max-width:640px){.ro{gap:12px}.ro-r,.ro-bar{display:none!important}}
+.lofi{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+.lofi button{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 10px;border:0;cursor:pointer;
+background:#3a2a5c;color:#e9ddff;font:600 12px/1 "Segoe UI",system-ui,sans-serif;box-shadow:0 0 0 2px #0d0818;white-space:nowrap}
+.lofi button:hover{background:#4b3a78}.lofi button:focus-visible{outline:2px solid #a78bfa;outline-offset:2px}
+.lofi button[aria-pressed="true"]{background:#a78bfa;color:#1a0f2e}.lofi button[hidden]{display:none}
+.lofi .lf-mute{width:28px;padding:0}.lofi .lf-mute .x{display:none}.lofi .lf-mute.muted .x{display:inline}
+.lofi .lf-mute.muted .w{display:none}.lofi .lf-mute.muted{background:#5b2140;color:#ffd1e3}
 .use-note{flex:0 0 auto;display:flex;align-items:center;gap:9px;min-height:34px;padding:5px 14px;background:#2e2410;
 border-bottom:2px solid #0d0818;color:#f6e3b4;font-size:13px;line-height:1.3}.use-note[hidden]{display:none}
 .use-note b{flex:0 0 auto;font:700 12px/1 ui-monospace,Consolas,monospace;color:#1a0f2e;background:#fbbf24;padding:4px 6px}

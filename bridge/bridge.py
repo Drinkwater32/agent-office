@@ -63,6 +63,8 @@ FILES = {
     'frontdesk.js': (JS, 'static'),
     'conference.js': (JS, 'static'),
     'extras.js': (JS, 'static'),
+    'lofi.js': (JS, 'static'),
+    'lofi.wav': ('audio/wav', 'static'),     # the soundtrack's loop, made by tools/make_lofi.py; fetched, so no media-src
     'icon.png': ('image/png', 'static'),
 }
 RUN_FILES = {n for n, (_, where) in FILES.items() if where == 'run'}
