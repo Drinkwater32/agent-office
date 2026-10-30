@@ -261,7 +261,8 @@ At the top right: how much of your 5-hour Claude usage you've spent, when it res
 is (**context**). The numbers turn amber, then red, as you near the limit. At that point Claude writes a short handoff
 note (`.agent-office/HANDOFF.md` in your project) so a new session can pick up where this one stopped. Right at the
 limit, the office closes for the night until your usage resets. The numbers appear after Claude's first reply, on a
-subscription plan.
+subscription plan. If you have extra usage turned on, the office stays open past the limit instead: the gauge says
+**OVERTIME** with the time left until the reset, and the lights go down a little (`usage.extra` in the config).
 
 <details>
 <summary><b>More: the soundtrack and the whiteboard</b></summary>

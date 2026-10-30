@@ -78,6 +78,21 @@
   }
   const RM = part('ro-main')
   const RC = part('ro-ctx')
+  // overtime's stopwatch, before the main window's label (shown only in overtime)
+  const otWatch = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  otWatch.setAttribute('class', 'ro-ot')
+  otWatch.setAttribute('viewBox', '0 0 9 10')
+  otWatch.setAttribute('shape-rendering', 'crispEdges')
+  otWatch.setAttribute('aria-hidden', 'true')
+  for (const [d, f] of [['M3 0h3v1h-3zM4 1h1v1h-1zM2 2h5v1h1v1h1v4h-1v1h-1v1h-5v-1h-1v-1h-1v-4h1v-1h1z', '#fbbf24'],
+    ['M3 3h3v1h1v3h-1v1h-3v-1h-1v-3h1z', '#1a0f26'], ['M4 4h1v2h1v1h-2z', '#fbbf24']]) {
+    const pa = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    pa.setAttribute('d', d)
+    pa.setAttribute('fill', f)
+    otWatch.append(pa)
+  }
+  RM.el.prepend(otWatch)
+  const LEFT = /^(under 1m|\d{1,2}m|\d{1,3}h \d{2}m)$/
   const barEl = document.querySelector('.bar')
   if (barEl) barEl.appendChild(ro)
   function gauge(v) {
@@ -93,13 +108,23 @@
     RM.fill.style.width = `${main ? Math.max(4, main.pct) : 0}%`
     RM.r.textContent = resets ? `resets ${resets}` : ''
     RM.r.hidden = !resets
+    // overtime (past the limit on extra usage): OVERTIME, the time to the reset, the stopwatch; the office after hours
+    const over = !!(main && o.main.over === true)
+    const left = over && typeof o.main.left === 'string' && LEFT.test(o.main.left) ? o.main.left : ''
+    if (over) {
+      RM.el.className = 'ro-g ro-main over'
+      RM.l.textContent = 'OVERTIME'
+      RM.n.textContent = left ? `${left} left` : ''
+    }
+    svg.setAttribute('data-over', over ? '1' : '0')
     RC.el.hidden = !ctx
     RC.el.className = `ro-g ro-ctx ${ctx ? ctx.level : 'none'}`
     RC.l.textContent = 'context'
     RC.n.textContent = ctx ? `${ctx.pct}%` : ''
     RC.bar.hidden = true
     RC.r.hidden = true
-    ro.title = [main ? `${name} limit: ${main.pct}% used${resets ? `, resets ${resets}` : ''}` : 'No usage reading yet (it comes with the first reply on a subscription)',
+    ro.title = [over ? `Overtime: past the ${name} limit on extra usage${resets ? ` until ${resets}` : ''}`
+      : main ? `${name} limit: ${main.pct}% used${resets ? `, resets ${resets}` : ''}` : 'No usage reading yet (it comes with the first reply on a subscription)',
       ctx ? `Context window: ${ctx.pct}% full` : ''].filter(Boolean).join('\n')
   }
   gauge(null)

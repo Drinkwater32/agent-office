@@ -67,12 +67,12 @@ test('the handoff prompt rewrites the one file whole, never appends', async () =
 })
 
 test("the config's usage thresholds and handoff file are checked", async () => {
-  expect(parseConfig(undefined).config.usage).toEqual({ warnAt: 90, closeAt: 98, handoffFile: '.agent-office/HANDOFF.md' })
+  expect(parseConfig(undefined).config.usage).toEqual({ warnAt: 90, closeAt: 98, handoffFile: '.agent-office/HANDOFF.md', extra: 'auto' })
   const ok = parseConfig(JSON.stringify({ usage: { warnAt: 80, closeAt: 95, handoffFile: 'docs/handoff.md' } }))
-  expect(ok.config.usage).toEqual({ warnAt: 80, closeAt: 95, handoffFile: 'docs/handoff.md' })
+  expect(ok.config.usage).toEqual({ warnAt: 80, closeAt: 95, handoffFile: 'docs/handoff.md', extra: 'auto' })
   expect(ok.warnings.length).toBe(0)
   const bad = parseConfig(JSON.stringify({ usage: { warnAt: 99, closeAt: 60, handoffFile: '../../etc/passwd' } }))
-  expect(bad.config.usage).toEqual({ warnAt: 90, closeAt: 98, handoffFile: '.agent-office/HANDOFF.md' })
+  expect(bad.config.usage).toEqual({ warnAt: 90, closeAt: 98, handoffFile: '.agent-office/HANDOFF.md', extra: 'auto' })
   expect(bad.warnings.length).toBe(2)
   expect(parseConfig(JSON.stringify({ usage: { handoffFile: 'notes.exe' } })).config.usage.handoffFile).toBe('.agent-office/HANDOFF.md')
   expect(parseConfig(JSON.stringify({ usage: { handoffFile: '' } })).config.usage.handoffFile).toBe('')

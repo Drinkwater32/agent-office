@@ -6,11 +6,21 @@
 // is asked to rewrite the one handoff file; when one passes `closeAt` (98%), or the API rejects a turn for the rate
 // limit, the office closes until the window resets. It opens again when that time passes or the window reads under
 // 50% again. The readout shows the 5-hour window and the context window, colored by the same thresholds.
+//
+// Overtime: with extra usage on the account, a turn can still be answered past the 5-hour limit. The engine tells a
+// plugin nothing about extra usage itself (no flag, no credits used or left): only each window's percentage and reset
+// time, the session's cost at API prices, and the rate-limit error. So overtime is what the readings show: a turn
+// answered while a window reads 100% (or more). Then the office doesn't close (or opens again) and shows OVERTIME until
+// the window resets; a rate-limit error still closes it (no extra usage, or it ran out). Once extra usage has been seen
+// at work (within 30 days), the close at closeAt is skipped too, failing toward an open office. `extra`: auto (that),
+// on (assume extra usage: never close on a percentage) or off (close at closeAt, no overtime).
 
 import { clockText, whenText } from './clock'
 
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
-export type Thresholds = { warnAt: number; closeAt: number }
+export type Extra = 'auto' | 'on' | 'off'
+export type Thresholds = { warnAt: number; closeAt: number; extra?: Extra }
+export type Over = { kind: string; key: string; since: number; until?: number; cost0?: number }
 export type Closed = { kind: string; key: string; until?: number; at: number; why: 'limit' | 'error' }
 export type UsageMem = {
   warned: string[]          // the window cycles already warned (kind|resetsAt), newest last
@@ -18,12 +28,15 @@ export type UsageMem = {
   saved?: number            // when the handoff was seen saved after that (the file's time, or Claude's reply)
   closed?: Closed
   reopened?: number         // when the office last opened again: the chat's hint says so until the user speaks
+  over?: Over               // overtime: past the limit on extra usage, until the window resets
+  extraSeen?: number        // when a turn was last answered past a limit (extra usage at work)
   last: Limit[]             // the last reading, for the readout and /office-usage
 }
 
 export const REOPEN_UNDER = 50
 export const AMBER_UNDER_WARN = 15
 export const EMPTY_MEM: UsageMem = { warned: [], last: [] }
+export const EXTRA_KEEP_MS = 30 * 86_400_000
 
 const KIND = /^[a-z0-9_]{1,32}$/
 const pctOk = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1000
@@ -51,6 +64,12 @@ export function cleanMem(v: unknown): UsageMem {
   if (num(o.asked)) mem.asked = num(o.asked)
   if (num(o.saved)) mem.saved = num(o.saved)
   if (num(o.reopened)) mem.reopened = num(o.reopened)
+  if (num(o.extraSeen)) mem.extraSeen = num(o.extraSeen)
+  const ov = o.over && typeof o.over === 'object' ? o.over as Record<string, unknown> : undefined
+  if (ov && typeof ov.kind === 'string' && ov.kind.length <= 32 && typeof ov.key === 'string' && ov.key.length <= 80 && num(ov.since)) {
+    mem.over = { kind: ov.kind, key: ov.key, since: num(ov.since)!, ...(num(ov.until) ? { until: num(ov.until) } : {}),
+      ...(typeof ov.cost0 === 'number' && Number.isFinite(ov.cost0) && ov.cost0 >= 0 ? { cost0: ov.cost0 } : {}) }
+  }
   const c = o.closed && typeof o.closed === 'object' ? o.closed as Record<string, unknown> : undefined
   if (c && typeof c.kind === 'string' && c.kind.length <= 32 && typeof c.key === 'string' && c.key.length <= 80 && num(c.at) &&
     (c.why === 'limit' || c.why === 'error')) {
@@ -69,7 +88,13 @@ export const top = (limits: Limit[], now: number): Limit | undefined =>
 
 export const isSaved = (m: UsageMem) => !!(m.asked && m.saved && m.saved >= m.asked)
 
-export type Step = { mem: UsageMem; warn?: Limit; close?: Limit; reopen?: boolean }
+export type Step = { mem: UsageMem; warn?: Limit; close?: Limit; reopen?: boolean; overtime?: Limit; overEnd?: boolean }
+
+/** Whether extra usage counts as there: the config says so (on), or it was seen at work within 30 days (auto). */
+export const assumeExtra = (m: UsageMem, cfg: Thresholds, now: number) =>
+  cfg.extra === 'on' || ((cfg.extra ?? 'auto') === 'auto' && !!m.extraSeen && now - m.extraSeen < EXTRA_KEEP_MS)
+const overOf = (l: Limit, now: number, cost?: number): Over =>
+  ({ kind: l.kind, key: cycleKey(l), since: now, ...(resetOf(l) ? { until: resetOf(l) } : {}), ...(cost !== undefined ? { cost0: cost } : {}) })
 
 /**
  * One reading of the windows (or none, on the poll: `limits` undefined keeps the last) against what was decided before.
@@ -91,12 +116,27 @@ export function step(prev: UsageMem, cfg: Thresholds, limits: Limit[] | undefine
       out.reopen = true
     }
   }
+  if (mem.over) {                               // overtime ends with its window: the reset, a new cycle, or under 50%
+    const o = mem.over
+    const same = limits?.find(l => l.kind === o.kind)
+    if ((o.until !== undefined && now >= o.until) || (same && (cycleKey(same) !== o.key || same.percentUsed < REOPEN_UNDER))) {
+      delete mem.over
+      out.overEnd = true
+    }
+  }
   if (!limits) return out                       // the poll only opens; a reading decides the rest
-  if (!mem.closed && !out.reopen) {
+  if (!mem.closed && !out.reopen && !mem.over) {
     const t = top(limits, now)
     if (t && t.percentUsed >= cfg.closeAt) {
-      mem.closed = { kind: t.kind, key: cycleKey(t), at: now, why: 'limit', ...(resetOf(t) ? { until: resetOf(t) } : {}) }
-      out.close = t
+      if (cfg.extra !== 'off' && assumeExtra(mem, cfg, now)) {
+        if (t.percentUsed >= 100) {                 // past the limit on extra usage: overtime, the office stays open
+          mem.over = overOf(t, now)
+          out.overtime = t
+        }
+      } else {
+        mem.closed = { kind: t.kind, key: cycleKey(t), at: now, why: 'limit', ...(resetOf(t) ? { until: resetOf(t) } : {}) }
+        out.close = t
+      }
     }
   }
   if (out.close || !mem.closed) {
@@ -117,18 +157,37 @@ export function step(prev: UsageMem, cfg: Thresholds, limits: Limit[] | undefine
 export function closeForError(prev: UsageMem, now: number): Step {
   const mem: UsageMem = { ...prev, warned: [...prev.warned] }
   if (mem.closed) return { mem }
+  delete mem.over                               // no extra usage after all (or it ran out): overtime is over
   const t = top(mem.last, now)
   const until = t ? resetOf(t) : undefined
   mem.closed = { kind: t?.kind ?? 'limit', key: t ? cycleKey(t) : 'error', at: now, why: 'error', ...(until ? { until } : {}) }
   return { mem, close: t ?? { kind: 'limit', percentUsed: 100 } }
 }
 
-/** A main-session turn answered: an office closed on an API error opens again (the limit is evidently back). */
-export function answered(prev: UsageMem, now: number): Step {
+/**
+ * A main-session turn answered: an office closed on an API error opens again (the limit is evidently back). Answered
+ * while a window reads 100% or more, that's extra usage at work: overtime (the office open again, if it had closed).
+ */
+export function answered(prev: UsageMem, now: number, cfg?: Thresholds, cost?: number): Step {
+  const past = cfg?.extra === 'off' ? undefined : live(prev.last, now).filter(l => l.percentUsed >= 100)
+    .sort((a, b) => b.percentUsed - a.percentUsed)[0]
+  if (past) {
+    const mem: UsageMem = { ...prev, extraSeen: now }
+    if (mem.over && mem.over.key === cycleKey(past) && !mem.closed) return { mem }
+    delete mem.closed
+    mem.over = overOf(past, now, cost)
+    return { mem, overtime: past }
+  }
   if (!prev.closed || prev.closed.why !== 'error') return { mem: prev }
   const mem: UsageMem = { ...prev, reopened: now }
   delete mem.closed
   return { mem, reopen: true }
+}
+
+/** How long until a time, in words: "1h 12m", "40m", "under 1m". */
+export function leftLabel(until: number, now: number): string {
+  const m = Math.max(0, Math.floor((until - now) / 60_000))
+  return m < 1 ? 'under 1m' : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
 }
 
 // -- words
@@ -154,7 +213,7 @@ export const levelOf = (pct: number, cfg: Thresholds): Level =>
   pct >= cfg.warnAt ? 'red' : pct >= cfg.warnAt - AMBER_UNDER_WARN ? 'amber' : 'ok'
 export const ctxOk = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 100
 export type Reading = { pct: number; level: Level }
-export type Readout = { main: (Reading & { label: string; resets: string }) | null; ctx: Reading | null }
+export type Readout = { main: (Reading & { label: string; resets: string; over?: true; left?: string }) | null; ctx: Reading | null }
 
 export function readout(m: UsageMem, cfg: Thresholds, ctx: number | null | undefined, now: number): Readout {
   const l = live(m.last, now)
@@ -164,36 +223,41 @@ export function readout(m: UsageMem, cfg: Thresholds, ctx: number | null | undef
   }
   const main = l.find(x => x.kind === 'five_hour') ?? top(l, now)
   return {
-    main: main ? { ...r(main.percentUsed), label: kindLabel(main.kind), resets: main.resetsAt ? clockText(Date.parse(main.resetsAt)) : '' } : null,
+    main: main ? { ...r(main.percentUsed), label: kindLabel(main.kind), resets: main.resetsAt ? clockText(Date.parse(main.resetsAt)) : '',
+      ...(m.over && !m.closed && m.over.kind === main.kind
+        ? { over: true as const, ...(m.over.until ? { left: leftLabel(m.over.until, now) } : {}) } : {}) } : null,
     ctx: ctxOk(ctx) ? r(ctx) : null,
   }
 }
 /** The readout as one line, for the pane: "5-hour 62% · resets 3:40 PM · context 31%". */
 export function readoutLine(ro: Readout): string {
-  return [ro.main ? `${ro.main.label} ${ro.main.pct}%` : '5-hour –', ro.main?.resets ? `resets ${ro.main.resets}` : '',
+  return [ro.main?.over ? `OVERTIME${ro.main.left ? ` ${ro.main.left} left` : ''}` : ro.main ? `${ro.main.label} ${ro.main.pct}%` : '5-hour –',
+    ro.main?.resets ? `resets ${ro.main.resets}` : '',
     ro.ctx ? `context ${ro.ctx.pct}%` : ''].filter(Boolean).join(' · ')
 }
 
 /** The guard's state for the page: the warning notice, the closed sign. Numbers and clock times only. */
 export type UsageView = { pct: number | null; kind: string; warn: boolean; closed: boolean; until: string; reopened: boolean;
-  asked: boolean; saved: boolean }
+  asked: boolean; saved: boolean; over: boolean; overUntil: string }
 export function view(m: UsageMem, cfg: Thresholds, now: number): UsageView {
   const t = top(m.last, now)
   const c = m.closed
   return {
     pct: t ? Math.floor(Math.min(100, t.percentUsed)) : null,
     kind: t ? kindLabel(t.kind) : '',
-    warn: !c && !!t && t.percentUsed >= cfg.warnAt,
+    warn: !c && !m.over && !!t && t.percentUsed >= cfg.warnAt,
     closed: !!c,
     until: c?.until ? clockText(c.until) : '',
     reopened: !c && !!m.reopened,
     asked: !!m.asked,
     saved: isSaved(m),
+    over: !c && !!m.over,
+    overUntil: !c && m.over?.until ? clockText(m.over.until) : '',
   }
 }
 
 /** /office-usage: the windows, the thresholds, the office's state. */
-export function report(m: UsageMem, cfg: Thresholds, handoff: string, ctx: number | null, now: number): string {
+export function report(m: UsageMem, cfg: Thresholds, handoff: string, ctx: number | null, now: number, cost?: number): string {
   const rows = m.last.map(l => {
     const r = resetOf(l)
     const old = r !== undefined && r <= now
@@ -208,6 +272,11 @@ export function report(m: UsageMem, cfg: Thresholds, handoff: string, ctx: numbe
     `Warn at ${cfg.warnAt}%, close at ${cfg.closeAt}%. Handoff file: ${handoff || 'none (no handoff is asked for)'}.`,
     `Office: ${c ? `closed${c.until ? ` until ${whenText(c.until, now)}` : ''}${c.why === 'error' ? ' (the API reported a rate limit)' : ''}` : 'open'}.` +
       (m.asked ? ` Handoff ${isSaved(m) ? 'saved' : 'asked for, not saved yet'}.` : ''),
-    'Change them in the config (usage.warnAt, usage.closeAt, usage.handoffFile), then run /office-config.',
+    `Extra usage: ${cfg.extra ?? 'auto'}${(cfg.extra ?? 'auto') === 'auto' ? (m.extraSeen ? ` (last seen at work ${whenText(m.extraSeen, now)})` : ' (not seen at work yet)') : ''}.`,
+    ...(m.over && !c ? [`OVERTIME on extra usage${m.over.until ? ` until ${whenText(m.over.until, now)} (${leftLabel(m.over.until, now)} left)` : ''}.`,
+      ...(m.over.cost0 !== undefined && cost !== undefined && cost >= m.over.cost0
+        ? [`This session has cost $${(cost - m.over.cost0).toFixed(2)} at API prices since overtime began (/cost).`] : []),
+      "Extra-usage credits used and left aren't exposed to plugins: only the windows and this session's cost are."] : []),
+    'Change them in the config (usage.warnAt, usage.closeAt, usage.extra, usage.handoffFile), then run /office-config.',
   ].filter(Boolean).join('\n')
 }

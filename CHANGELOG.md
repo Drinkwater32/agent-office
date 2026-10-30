@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.3
+
+### Added
+
+- **Overtime.** With extra usage on your account, Claude keeps answering past the 5-hour limit, and the office no longer
+  closes for the night. A turn answered while a usage window reads 100% is overtime: the office stays open (or opens
+  again), the gauge says **OVERTIME** in amber with a stopwatch and the time left until the window resets, and the
+  office dims to an after-hours look until then. A rate-limit error still closes it (no extra usage, or it ran out).
+  Once extra usage has been seen at work (within 30 days), the close at `closeAt` is skipped too, so the office fails
+  toward staying open. The warning and its handoff are unchanged. `/office-usage` shows the time left and this
+  session's cost since overtime began (at API prices, as /cost counts it).
+- **`usage.extra`** in the config: `"auto"` (the default, as above), `"on"` (assume extra usage: never close on a
+  percentage) or `"off"` (close at `closeAt`, no overtime).
+
+### Not available
+
+- **Extra-usage credits used and left.** Claude Code doesn't expose them to plugins: only each usage window's
+  percentage and reset time, the session's cost, and the rate-limit error. Overtime is read from those.
+
 ## 0.2.2
 
 ### Fixed

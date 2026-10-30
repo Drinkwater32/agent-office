@@ -28,7 +28,7 @@
     { "name": "Pixel", "coat": "short", "color": "gray" },
     { "name": "Noodle", "coat": "long", "color": "black" }
   ],
-  "usage": { "warnAt": 90, "closeAt": 98, "handoffFile": ".agent-office/HANDOFF.md" },
+  "usage": { "warnAt": 90, "closeAt": 98, "handoffFile": ".agent-office/HANDOFF.md", "extra": "auto" },
   "deadline": { "label": "Launch", "at": "2026-12-01T17:00" },
   "seasons": true,
   "openOnStart": true,

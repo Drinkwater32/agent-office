@@ -35,10 +35,10 @@ export type OfficeConfig = {
 }
 // the usage guard: a warning (and a handoff asked of Claude) at warnAt %, the office closed at closeAt %; the handoff
 // file relative to the project's folder (or absolute), '' for no handoff prompt
-export type UsageConfig = { warnAt: number; closeAt: number; handoffFile: string }
+export type UsageConfig = { warnAt: number; closeAt: number; handoffFile: string; extra: 'auto' | 'on' | 'off' }
 // the whiteboard's countdown: a label, and a date and time on this machine's clock
 export type Deadline = { label: string; y: number; mo: number; d: number; h: number; mi: number }
-export const DEFAULT_USAGE: UsageConfig = { warnAt: 90, closeAt: 98, handoffFile: '.agent-office/HANDOFF.md' }
+export const DEFAULT_USAGE: UsageConfig = { warnAt: 90, closeAt: 98, handoffFile: '.agent-office/HANDOFF.md', extra: 'auto' }
 
 export const MAX_DEPARTMENTS = 8
 export const MAX_STAFF = 12
@@ -339,7 +339,7 @@ function usageOf(v: unknown, warn: (s: string) => void): UsageConfig {
     warn('usage: must be an object; using the defaults.')
     return out
   }
-  for (const k of Object.keys(v)) if (!['warnAt', 'closeAt', 'handoffFile'].includes(k)) warn(`usage: unknown field "${clip(k)}" ignored.`)
+  for (const k of Object.keys(v)) if (!['warnAt', 'closeAt', 'handoffFile', 'extra'].includes(k)) warn(`usage: unknown field "${clip(k)}" ignored.`)
   const whole = (n: unknown, lo: number, hi: number) => typeof n === 'number' && Number.isInteger(n) && n >= lo && n <= hi
   if (v.warnAt !== undefined) {
     if (whole(v.warnAt, 50, 99)) out.warnAt = v.warnAt as number
@@ -354,6 +354,11 @@ function usageOf(v: unknown, warn: (s: string) => void): UsageConfig {
       `${DEFAULT_USAGE.warnAt} and ${DEFAULT_USAGE.closeAt}.`)
     out.warnAt = DEFAULT_USAGE.warnAt
     out.closeAt = DEFAULT_USAGE.closeAt
+  }
+  // extra usage: auto (overtime once a turn is answered past the limit), on (never close on a percentage), off
+  if (v.extra !== undefined) {
+    if (v.extra === 'auto' || v.extra === 'on' || v.extra === 'off') out.extra = v.extra
+    else warn('usage.extra: "auto", "on" or "off".')
   }
   if (v.handoffFile === null || v.handoffFile === '') out.handoffFile = ''
   else if (v.handoffFile !== undefined) {

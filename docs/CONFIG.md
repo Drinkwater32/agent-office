@@ -73,10 +73,13 @@ don't allow sound before a click anyway).
 
 The handoff file is on by default, at `.agent-office/HANDOFF.md` in the project. Point it elsewhere (relative to the
 project, or absolute), or set it to `""` to turn it off. `warnAt` and `closeAt` are the usage percentages for the
-warning (and the handoff) and for closing the office.
+warning (and the handoff) and for closing the office. `extra` is for extra usage past the limit: `"auto"` (the
+default) keeps the office open in OVERTIME once a turn is answered past the limit, and skips the close for 30 days
+after; `"on"` never closes on a percentage; `"off"` closes at `closeAt` as before. A rate-limit error closes it either
+way.
 
 ```json
-"usage": { "warnAt": 85, "closeAt": 98, "handoffFile": "docs/HANDOFF.md" }
+"usage": { "warnAt": 85, "closeAt": 98, "handoffFile": "docs/HANDOFF.md", "extra": "auto" }
 ```
 
 ### Everything else
@@ -113,7 +116,8 @@ skipped and why. The `//` notes are for reading here: JSON has no comments, so l
   "usage": {
     "warnAt": 90,                               // % of a usage window: red gauge, and Claude writes the handoff
     "closeAt": 98,                              // %: the office closes until the window resets
-    "handoffFile": ".agent-office/HANDOFF.md"   // relative to the project folder, or absolute; "" for no handoff
+    "handoffFile": ".agent-office/HANDOFF.md",  // relative to the project folder, or absolute; "" for no handoff
+    "extra": "auto"                             // extra usage: auto (overtime past the limit), on, or off
   },
   "deadline": { "label": "Launch", "at": "2026-12-01T17:00" },   // a countdown on the whiteboard (your local time)
   "seasons": true,                              // Halloween, Thanksgiving and holiday decor by the date
@@ -130,7 +134,7 @@ skipped and why. The `//` notes are for reading here: JSON has no comments, so l
 | **departments** | `name` up to 16 characters, `color` as `#rrggbb`, up to 16 `agentTypes` (`Explore`, `Plan`, `general-purpose`, or your own agent types) and 60 `keywords`. Default: Engineering, Review, Design, Research. |
 | **staff** | A name, or `{ "name", "look" }`. `[]` for an empty office. Default: six unnamed teammates. |
 | **pets** | `coat`: `"short"` or `"long"`. `color`: `orange`, `cream`, `gray`, `black`, `brown` or `white`. |
-| **usage** | `warnAt`: a whole number from 50 to 99. `closeAt`: 51 to 100, above `warnAt`. `handoffFile`: a path to a `.md` or `.txt` file, with no `..` in it. |
+| **usage** | `warnAt`: a whole number from 50 to 99. `closeAt`: 51 to 100, above `warnAt`. `handoffFile`: a path to a `.md` or `.txt` file, with no `..` in it. `extra`: `"auto"`, `"on"` or `"off"`. |
 | **deadline** | `at`: `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM"` on this computer's clock. Leave it out for no countdown. |
 | **soundtrack** | `{ "enabled": false }` removes the Lo-fi toggle from the window entirely. |
 

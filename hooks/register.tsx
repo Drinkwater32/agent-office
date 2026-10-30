@@ -187,7 +187,8 @@ let uMem: U.UsageMem = { ...U.EMPTY_MEM }
 let uLoaded = false
 let uChain: Promise<unknown> = Promise.resolve()
 let uSaving = false
-const thresholds = (): U.Thresholds => ({ warnAt: cfg?.usage.warnAt ?? 90, closeAt: cfg?.usage.closeAt ?? 98 })
+const thresholds = (): U.Thresholds => ({ warnAt: cfg?.usage.warnAt ?? 90, closeAt: cfg?.usage.closeAt ?? 98, extra: cfg?.usage.extra ?? 'auto' })
+let costUsd: number | undefined      // overtime: this session's cost so far (/cost's), for /office-usage's line
 async function usageLoad($: EngineInterface): Promise<void> {
   if (uLoaded) return
   uMem = U.cleanMem(await $.store.get('usageMem').catch(() => undefined))
@@ -214,7 +215,11 @@ function usageRun($: EngineInterface, decide: (m: U.UsageMem, now: number) => U.
   return run
 }
 async function usageAct($: EngineInterface, s: U.Step, now: number): Promise<void> {
-  if (!s.warn && !s.close && !s.reopen) return
+  if (!s.warn && !s.close && !s.reopen && !s.overtime && !s.overEnd) return
+  if (s.overtime) {                 // past the limit on extra usage: the office stays open, in overtime
+    const till = uMem.over?.until ? ` until ${clockText(uMem.over.until)}` : ''
+    void $.ui.toast(`Overtime: past the ${U.kindLabel(s.overtime.kind)} limit on extra usage${till}.`)
+  }
   if (s.reopen) void $.ui.toast('The office is open again.')
   if (s.close) {
     const until = uMem.closed?.until ? ` until ${clockText(uMem.closed.until)}` : ''
@@ -759,6 +764,7 @@ export const register: Register = on => {
     try {
       await setup($)
       await ctxSeen($, e.context?.percent)
+      if (typeof e.cost?.usd === 'number' && Number.isFinite(e.cost.usd)) costUsd = e.cost.usd
       await usageRun($, (m, t) => U.step(m, thresholds(), U.cleanLimits(e.rateLimits), t))
       await usageSaved($)
       await pushOffice($, await $.clock.now())    // the page's readout moves with this reading
@@ -780,7 +786,8 @@ export const register: Register = on => {
     if (u) await ctxSeen($, u.context?.percent).catch(() => undefined)
     await usageRun($, (m, t) => U.step(m, thresholds(), u ? U.cleanLimits(u.rateLimits) : undefined, t)).catch(() => undefined)
     const now: number = await $.clock.now()
-    return { text: U.report(uMem, thresholds(), handoffPath(), ctxPct, now) }
+    if (typeof u?.cost?.usd === 'number' && Number.isFinite(u.cost.usd)) costUsd = u.cost.usd
+    return { text: U.report(uMem, thresholds(), handoffPath(), ctxPct, now, costUsd) }
   })
 
   // a meeting: called by the user (/office-meeting [topic]; the office's button comes through the bridge), run by
@@ -866,7 +873,7 @@ export const register: Register = on => {
       }
       await writeConvo($)
       if (U.HANDOFF_REPLY.test(e.answer)) await usageSaved($, 'reply').catch(() => undefined)
-      await usageRun($, (m, t) => U.answered(m, t)).catch(() => undefined)   // a turn answered: not rate-limited now
+      await usageRun($, (m, t) => U.answered(m, t, thresholds(), costUsd)).catch(() => undefined)   // a turn answered: not rate-limited now
     }
     return r
   }).catch(($, e, next) => next(e))
@@ -914,7 +921,8 @@ export const register: Register = on => {
     const gauge = (
       <Text>
         {shut ? <Text color="red">{shut}</Text> : null}
-        <Text color={tone(ro.main)} bold>{ro.main ? `${ro.main.label} ${ro.main.pct}%` : '5-hour –'}</Text>
+        <Text color={ro.main?.over ? 'yellow' : tone(ro.main)} bold>{ro.main?.over ? `OVERTIME${ro.main.left ? ` ${ro.main.left} left` : ''}`
+          : ro.main ? `${ro.main.label} ${ro.main.pct}%` : '5-hour –'}</Text>
         {ro.main?.resets ? <Text dimColor> · resets {ro.main.resets}</Text> : null}
         {ro.ctx ? <Text color={tone(ro.ctx)} dimColor={ro.ctx.level === 'ok'}> · context {ro.ctx.pct}%</Text> : null}
       </Text>
