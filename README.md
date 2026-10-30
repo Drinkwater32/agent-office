@@ -9,14 +9,14 @@ Watch them walk in, take a desk, work, and hand their reports to Claude at the f
 
 [![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FDrinkwater32%2Fagent-office%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=version&color=7c3aed)](CHANGELOG.md)
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs)
-[![Platforms](https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-14b8a6)](#requirements)
+[![Platforms](https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-14b8a6)](#before-you-start)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3b82f6)](LICENSE)
 
-[Install](#install) · [First steps](#first-steps) · [Commands](#commands) · [Make it yours](#make-it-yours) · [Troubleshooting](#troubleshooting)
+[Quick install](#quick-install) · [Step-by-step setup](#step-by-step-setup) · [A tour](#a-tour) · [Commands](#commands) · [Troubleshooting](#troubleshooting)
 
 <br>
 
-<img src="docs/screenshot.png" alt="The office in a browser window: departments at work, a meeting in the conference room, and the chat at the front desk" width="900">
+<img src="docs/screenshot.png" alt="The office in a browser window: agents at their desks, a meeting in the conference room, and the chat at the front desk" width="900">
 
 </div>
 
@@ -26,17 +26,17 @@ Watch them walk in, take a desk, work, and hand their reports to Claude at the f
 
 |  |  |
 | --- | --- |
-| 🧑‍💻 **Your agents at work** | Every subagent Claude starts walks in, takes a desk in its department, and works there, with its latest words in a bubble and its current tool on a tag. |
-| 💬 **A chat at the front desk** | Type to Claude from the browser. It reaches the same session as your terminal. |
-| 🗓️ **Meetings** | Claude chairs a meeting between your departments in the conference room: proposals, discussion, and decisions on the big screen. |
-| 📊 **A usage gauge** | Your 5-hour usage and context window at a glance. Near the limit, Claude writes a handoff note so the next session can pick up where this one stopped. |
-| 🐈 **Little touches** | Office pets with minds of their own, day and night, holiday decor, a whiteboard with your branches, and an optional lo-fi soundtrack. |
+| 🧑‍💻 **Your agents at work** | Every helper agent Claude starts walks in, takes a desk in its department, and works there, with its latest words in a speech bubble. |
+| 💬 **A chat at the front desk** | Talk to Claude from your browser. It's the same conversation as in your terminal. |
+| 🗓️ **Meetings** | Ask Claude to call a meeting: your departments walk into the conference room, pitch ideas, and the decisions go up on the screen. |
+| 📊 **A usage gauge** | See how much of your Claude usage you've spent. Near the limit, Claude writes a note so your next session can pick up where you left off. |
+| 🐈 **Little touches** | Office pets with minds of their own, day and night, a whiteboard, and an optional lo-fi soundtrack. |
 
 <br>
 
-## Install
+## Quick install
 
-**In a Claude Code session**, run these one at a time:
+Already use Claude Code? Type these into Claude, one at a time:
 
 ```
 /plugin marketplace add Drinkwater32/agent-office
@@ -44,100 +44,259 @@ Watch them walk in, take a desk, work, and hand their reports to Claude at the f
 /reload-plugins
 ```
 
-**That's it.** The office opens in your browser. If it doesn't, type `/office`.
+The office opens in your browser. If it doesn't, type `/office`.
 
-<details>
-<summary><b>Other ways to install</b> (the terminal, the desktop app)</summary>
+**New to all this?** Follow the [step-by-step setup](#step-by-step-setup) below. It takes about 10 minutes, and you
+don't need to know anything about git or GitHub.
 
 <br>
 
-**From a terminal:**
+## Step-by-step setup
+
+### Before you start
+
+You need three things. The steps below walk you through each one.
+
+| | What | Why |
+| --- | --- | --- |
+| ✅ | **Claude Code** | The office is an add-on (a "plugin") for Claude Code. |
+| ✅ | **A Claude subscription or API account** | To sign in to Claude Code. |
+| ✅ | **Python 3.8 or newer** | It runs the small chat server on your computer. Without it, the office still opens, but you can't chat from it. |
+
+Works on **Windows, macOS and Linux**.
+
+### Step 1: Open a terminal
+
+A terminal is a window where you type commands. Here's how to open one:
+
+| On | Do this |
+| --- | --- |
+| **Windows** | Press the <kbd>Windows</kbd> key, type **Terminal** (or **PowerShell**), and press <kbd>Enter</kbd>. |
+| **macOS** | Press <kbd>Cmd</kbd>+<kbd>Space</kbd>, type **Terminal**, and press <kbd>Enter</kbd>. |
+| **Linux** | Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>, or find **Terminal** in your apps. |
+
+Keep it open: you'll use it in the next steps.
+
+### Step 2: Install Claude Code
+
+Already have it? Skip to Step 3. To check, type this in the terminal and press <kbd>Enter</kbd>:
+
+```sh
+claude --version
+```
+
+If you see a version number, you have it. If you see "not found" or "not recognized", install it by following the
+official guide: **[Claude Code setup](https://code.claude.com/docs)**. The first time you run `claude`, it asks you to
+sign in.
+
+> [!NOTE]
+> If the guide asks you to install **Git**, do it. Claude Code uses it behind the scenes, and so does the plugin
+> install in Step 5. You never have to use git yourself.
+
+### Step 3: Install Python
+
+Check whether you already have it:
+
+| On | Type this | You're good if you see |
+| --- | --- | --- |
+| **Windows** | `python --version` | `Python 3.8` or higher (3.12 and 3.13 are fine) |
+| **macOS, Linux** | `python3 --version` | `Python 3.8` or higher |
+
+If you don't have it:
+
+- **Windows:** download it from **[python.org/downloads](https://www.python.org/downloads/)** and run the installer.
+  On its first screen, **tick "Add python.exe to PATH"** before you click Install. Then close the terminal and open
+  a new one so it notices Python.
+- **macOS:** download the installer from **[python.org/downloads](https://www.python.org/downloads/)** and run it.
+- **Linux:** it's usually already there. If not, install `python3` with your package manager (on Ubuntu:
+  `sudo apt install python3`).
+
+### Step 4: Start Claude in a project folder
+
+Claude works in a folder. Use the folder of something you're building, or make an empty one to try things out.
+
+Move the terminal into that folder with `cd`, then start Claude:
+
+```sh
+cd path/to/your/project
+claude
+```
+
+> [!TIP]
+> Not sure what to type after `cd`? Type `cd ` (with a space), drag the folder from your file explorer into the
+> terminal window, and press <kbd>Enter</kbd>.
+
+Claude may ask two questions the first time:
+
+- **"Do you trust the files in this folder?"** Choose **Yes**.
+- **Anything about "Claude in Chrome"?** Choose **No**. The office doesn't need it.
+
+### Step 5: Install the office
+
+You're now talking to Claude. Type each of these into **Claude's prompt box** (not a separate terminal) and press
+<kbd>Enter</kbd> after each one:
+
+```
+/plugin marketplace add Drinkwater32/agent-office
+```
+
+```
+/plugin install agent-office@agent-office
+```
+
+```
+/reload-plugins
+```
+
+The first command tells Claude Code where to find the office. The second installs it. The third switches it on
+without restarting.
+
+### Step 6: Open the office
+
+It usually opens in your browser by itself. If it doesn't, type `/office` in Claude.
+
+This is what you'll see the first time:
+
+<p align="center">
+  <img src="docs/first-run.png" alt="The office on first run: an empty office, a few staff and pets, and an empty chat on the right" width="820">
+</p>
+
+**It's normal for it to look quiet.** The staff and pets are always around, but agents only show up when Claude
+starts one. Head to [Try it out](#try-it-out) to bring the place to life.
+
+🎉 **You're set up!**
+
+<details>
+<summary><b>Using the Claude desktop app or VS Code instead?</b></summary>
+
+<br>
+
+**Desktop app:** click **+** next to the prompt box, then **Plugins** → **Add marketplace**, enter
+`Drinkwater32/agent-office`, then **Add plugin**.
+
+**Any version, from a terminal:** these do the same as Step 5, without starting Claude first:
 
 ```sh
 claude plugin marketplace add Drinkwater32/agent-office
 claude plugin install agent-office@agent-office
 ```
 
-Then start a new session with `claude`.
-
-**In the desktop app:** click **+** next to the prompt box, then **Plugins** → **Add marketplace**, enter
-`Drinkwater32/agent-office`, then **Add plugin**.
+Then start a new Claude session.
 
 </details>
 
-### Requirements
+<br>
 
-- **Claude Code**: the CLI, the VS Code extension, or the desktop app, on Windows, macOS or Linux.
-- **Python 3.8 or newer**, for the small local server behind the chat. Without it, the office still opens, read-only.
-  To check, run `python --version` (or `python3 --version` on macOS and Linux, or `py -3 --version` on Windows).
+## Try it out
 
-> [!TIP]
-> When you first start Claude in a folder, it may ask whether you trust it (say yes) and about **Claude in Chrome**
-> (say no: the office doesn't need it).
+Copy these into Claude (or into the chat in the office).
+
+**1. Send in an agent**
+
+> Explore how this project is laid out, with an agent.
+
+An agent walks in, sits at a desk in its department, works with a speech bubble over its head, then carries its
+report to the front desk.
+
+**2. Say hi from the browser**
+
+Type in the chat on the right side of the office and press <kbd>Enter</kbd>. Claude answers there and in your
+terminal: it's the same conversation.
+
+**3. Call a meeting**
+
+> Call a quick meeting with two departments about naming the office cat.
+
+They walk into the conference room, take turns talking, and the decision goes up on the big screen.
 
 <br>
 
-## First steps
+## A tour
 
-The office is quiet until Claude starts a subagent. Try these three:
+### The floor
 
-1. **Send in an agent.** Ask: *"Explore how this project is laid out, with an agent."*<br>
-   It walks in, takes a desk, works, then carries its report to the front desk.
-2. **Say hi from the browser.** Type in the chat on the right and press <kbd>Enter</kbd>.<br>
-   It reaches the same session as the terminal.
-3. **Call a meeting.** Ask: *"Call a quick meeting with two departments about naming the office cat."*<br>
-   They walk into the conference room, talk in speech bubbles, and the decision goes up on the screen.
+<p align="center">
+  <img src="docs/office.png" alt="The office floor: agents at their desks in Engineering, Review, Design and Research, each with a speech bubble and a tag for what they're doing" width="820">
+</p>
 
-<br>
+Each department has its own room. Agents sit at a desk with a speech bubble saying what they're up to, and a tag
+showing what they're doing right now (**editing**, **reading**, **searching**...). Under the office, **On the floor**
+lists who's working and **Handed back** lists who's finished. Click an agent in the list to find it.
 
-## Commands
+### The chat and the conference room
 
-| Command | What it does |
-| --- | --- |
-| `/office` | Opens the office in your browser, with the chat. Asking Claude to "open the office" works too. |
-| `/office-meeting [topic]` | Calls a meeting in the conference room. With no topic, it's "Our priorities for the next week". |
-| `/office-pane` | A compact text view beside the chat: who's working, the inbox, and your usage. |
-| `/office-config` | Creates a starter config if you have none, applies it, and lists anything it skipped. |
-| `/office-usage` | Shows your usage windows, the context window, the thresholds, and whether the office is open. |
+<table>
+<tr>
+<td width="40%" valign="top">
+<img src="docs/chat.png" alt="The chat at the front desk, with a short conversation with Claude">
+</td>
+<td width="60%" valign="top">
+<img src="docs/meeting.png" alt="The conference room, with departments seated around the table and a speech bubble over the speaker">
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**The chat.** Type and press <kbd>Enter</kbd> (<kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line). Close it with the
+**X** or <kbd>Esc</kbd>; the bell brings it back, with a count of replies you haven't read.
+
+</td>
+<td valign="top">
+
+**Meetings.** Claude chairs. Each department presents an idea, they discuss, and Claude records the decisions on the
+screen. The **Meeting** tab keeps the whole transcript. To speak up yourself, turn on **Say in meeting** above the chat
+box.
+
+</td>
+</tr>
+</table>
+
+### The usage gauge
+
+<p align="center">
+  <img src="docs/gauge.png" alt="The usage gauge: 5-hour usage at 41%, resets at 3:20 PM, context at 37%" width="560">
+</p>
+
+At the top right: how much of your 5-hour Claude usage you've spent, when it resets, and how full this conversation
+is (**context**). The numbers turn amber, then red, as you near the limit. At that point Claude writes a short handoff
+note (`.agent-office/HANDOFF.md` in your project) so a new session can pick up where this one stopped. Right at the
+limit, the office closes for the night until your usage resets. The numbers appear after Claude's first reply, on a
+subscription plan.
 
 <details>
-<summary><b>How each part works</b></summary>
+<summary><b>More: the soundtrack and the whiteboard</b></summary>
 
 <br>
-
-**The chat.** Type at the front desk and press <kbd>Enter</kbd> (<kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line).
-Close it with the X or <kbd>Esc</kbd>; the bell brings it back, with a count of replies you haven't seen. Click an
-agent in the list under the office to find it on the floor.
-
-**Meetings.** Call one with `/office-meeting Ship the search feature`, with **Call a meeting** in the front desk's
-**Meeting** tab, or with the plate on the conference room's screen. Claude chairs: each department presents a
-proposal, they discuss, and Claude records the decisions. The room plays it at a reading pace, however fast Claude
-runs it: everyone sits down before the first word, each bubble stays up long enough to read, and the decisions stay on
-the screen before everyone walks out. The Meeting tab keeps the whole transcript. To speak, turn on **Say in meeting**
-above the chat box. One meeting at a time.
-
-**The gauge.** Beside the title: your 5-hour usage window and when it resets, then this session's context window.
-Each number turns amber 15 points before `warnAt` and red at it. At `warnAt`, Claude is asked once to rewrite the
-handoff file (`.agent-office/HANDOFF.md` in the project) so a later session can pick up where this one stopped. Add
-`.agent-office/` to your `.gitignore` if you don't want it committed. At `closeAt` the office closes: the lights go
-down, the staff go home, and a sign at the door says when it opens again. The numbers appear after Claude's first
-reply, on a subscription plan.
 
 **The soundtrack.** The **Lo-fi** button beside the title plays a quiet loop, with a mute button next to it. It's off
 every time the window opens; once on, it keeps playing in the background until you turn it off. The loop is generated
 from scratch by `tools/make_lofi.py` (no samples or recordings), so it ships under the same MIT license.
 
-**The whiteboard.** In the conference room: up to three branches of this project's git repository, each marked open or
-merged, with a dot for each department that has an agent on it. It reads git once a minute and never writes to it.
+**The whiteboard.** In the conference room: if your project uses git, up to three of its branches, each marked open or
+merged, with a dot for each department working on it. It only reads, and never changes anything.
 
 </details>
 
 <br>
 
+## Commands
+
+Type these into Claude:
+
+| Command | What it does |
+| --- | --- |
+| `/office` | Opens the office in your browser. Asking Claude to "open the office" works too. |
+| `/office-meeting [topic]` | Calls a meeting, e.g. `/office-meeting Plan the launch`. With no topic, it's "Our priorities for the next week". |
+| `/office-pane` | A compact text view next to Claude: who's working, the inbox, and your usage. |
+| `/office-config` | Creates your settings file if you have none, applies it, and lists anything it skipped. |
+| `/office-usage` | Shows your usage, the context window, and whether the office is open. |
+
+<br>
+
 ## Make it yours
 
-Run `/office-config` to create your settings file, edit it, then run `/office-config` again to apply it. Paste only
-what you want to change. For example, your name and look, your own departments, and the office pets:
+Rename the departments, change your character's look, name the pets. Run `/office-config` to create your settings
+file, edit it, then run `/office-config` again to apply it. Paste in only what you want to change:
 
 ```json
 {
@@ -157,8 +316,12 @@ what you want to change. For example, your name and look, your own departments, 
 
 ## Update or uninstall
 
+The easiest way: type `/plugin` in Claude. It opens a menu where you can update or remove installed plugins.
+
+Or, from a terminal (not inside Claude):
+
 ```sh
-# update
+# update to the newest version, then start a new Claude session
 claude plugin marketplace update agent-office
 claude plugin update agent-office@agent-office
 
@@ -167,31 +330,61 @@ claude plugin uninstall agent-office@agent-office
 claude plugin marketplace remove agent-office
 ```
 
-After an update, start a new session (or run `/reload-plugins`).
-
 <br>
 
 ## Troubleshooting
 
 <details>
-<summary><b>The window didn't open</b></summary>
+<summary><b>"claude: command not found" (or "not recognized")</b></summary>
 
 <br>
 
-Run `/office`. If no browser opens, the reply gives an address to paste into a browser on this computer
-(`http://127.0.0.1:<port>/office.html?k=...`). The part after `k=` is this session's private key: don't share it. On
-Linux the office tries `xdg-open`, then `gio open`, then `sensible-browser`.
+Claude Code isn't installed, or the terminal was open before you installed it. Close the terminal, open a new one, and
+try again. Still missing? Go back to [Step 2](#step-2-install-claude-code).
 
 </details>
 
 <details>
-<summary><b>"Read-only: chatting needs the local bridge"</b></summary>
+<summary><b>I typed <code>/plugin</code> and got an error like "no such file or directory"</b></summary>
 
 <br>
 
-The local server didn't start. Check that Python is installed (see [Requirements](#requirements)), then run `/office`
-again. The server's log is `~/.claude/plugins/data/agent-office/bridge.log`. A busy port isn't a problem: the server
-picks a free one by itself.
+Commands that start with `/` go into **Claude's prompt box**, not the plain terminal. Start Claude first with `claude`
+([Step 4](#step-4-start-claude-in-a-project-folder)), then type them.
+
+</details>
+
+<details>
+<summary><b>The plugin install failed, or mentions git</b></summary>
+
+<br>
+
+Claude Code downloads the plugin with Git. Install it from **[git-scm.com/downloads](https://git-scm.com/downloads)**,
+close and reopen the terminal, then repeat [Step 5](#step-5-install-the-office).
+
+</details>
+
+<details>
+<summary><b>The office didn't open in my browser</b></summary>
+
+<br>
+
+Type `/office` in Claude. If still no browser opens, the reply gives an address to paste into a browser on this
+computer (`http://127.0.0.1:<port>/office.html?k=...`). The part after `k=` is a private key for this session: don't
+share it. On Linux the office tries `xdg-open`, then `gio open`, then `sensible-browser`.
+
+</details>
+
+<details>
+<summary><b>It says "Read-only: chatting needs the local bridge"</b></summary>
+
+<br>
+
+The chat server didn't start, almost always because Python is missing. Check it ([Step 3](#step-3-install-python)),
+then type `/office` again. On Windows, if `python --version` opens the Microsoft Store instead, install Python from
+python.org with **"Add python.exe to PATH"** ticked.
+
+The server's log is `~/.claude/plugins/data/agent-office/bridge.log`.
 
 </details>
 
@@ -200,8 +393,18 @@ picks a free one by itself.
 
 <br>
 
-It shows subagents, so nobody comes in until Claude starts one. Ask for something "with an agent". The staff and pets
-are always there.
+That's normal. Agents only come in when Claude starts one. Ask for something "with an agent", like the examples in
+[Try it out](#try-it-out).
+
+</details>
+
+<details>
+<summary><b>The chat stopped working, or the office froze</b></summary>
+
+<br>
+
+Type `/office` to open a fresh window. Each Claude session has its own office, so an old browser tab from a closed
+session stops working.
 
 </details>
 
@@ -210,8 +413,8 @@ are always there.
 
 <br>
 
-It starts after Claude's current task; the Meeting tab says "Called" until then. A meeting nobody touches for three
-hours counts as over, and you can call another.
+It starts once Claude finishes what it's doing; the Meeting tab says "Called" until then. A meeting nobody touches
+for three hours counts as over, and you can call another.
 
 </details>
 
@@ -220,29 +423,44 @@ hours counts as over, and you can call another.
 
 <br>
 
-There's no usage reading yet. It comes with Claude's first reply, on a subscription plan.
+There's no usage reading yet. It appears after Claude's first reply, on a subscription plan.
 
 </details>
 
 <details>
-<summary><b>Reset everything</b></summary>
+<summary><b>Start over from scratch</b></summary>
 
 <br>
 
-Delete `~/.claude/agent-office/office.config.json` (the defaults come back) and the folder
-`~/.claude/plugins/data/agent-office/` (the sessions' page files and the log), then start a new session.
+Delete `~/.claude/agent-office/office.config.json` (your settings) and the folder
+`~/.claude/plugins/data/agent-office/` (temporary files), then start Claude again. (`~` means your home folder, for
+example `C:\Users\you` on Windows or `/Users/you` on a Mac.)
 
 </details>
+
+<br>
+
+## Words you'll see
+
+| Word | Meaning |
+| --- | --- |
+| **Terminal** | A window where you type commands. |
+| **Claude Code** | Claude as a coding assistant you run in a terminal (or the desktop app or VS Code). |
+| **Plugin** | An add-on for Claude Code. This office is one. |
+| **Marketplace** | A list of plugins Claude Code can install from. This repository is one, with one plugin in it. |
+| **Subagent** (agent) | A helper Claude sends off to do part of a job. Each one gets a desk in the office. |
+| **Session** | One run of `claude`, from start to exit. Each session gets its own office window. |
+| **Git, GitHub** | Tools for saving and sharing code. Claude Code uses Git to download the plugin; you don't need to use it yourself. |
 
 <br>
 
 ## Privacy and security
 
-- 🏠 **Everything stays on your computer.** No telemetry and no network calls.
-- 🔐 **The chat server is locked down.** It listens on `127.0.0.1` only, and every request needs a random 256-bit key
-  made for that session. Pages carry a strict Content-Security-Policy, and chat text is only ever shown as text.
-- 👀 **Read-only git.** The whiteboard runs read-only `git` commands in your project, never through a shell.
-- 🗂️ **What's stored:** your config (`~/.claude/agent-office/`), each session's page files and the server's log
+- 🏠 **Everything stays on your computer.** No tracking, and nothing is sent anywhere.
+- 🔐 **The chat server is locked down.** It only accepts connections from your own computer, and every request needs
+  a random key made for that session. Chat text is only ever shown as text.
+- 👀 **Read-only git.** The whiteboard only reads your project's git information, and never changes anything.
+- 🗂️ **What's stored:** your settings (`~/.claude/agent-office/`), each session's page files and the server's log
   (`~/.claude/plugins/data/agent-office/`, cleared three days after a session ends), and the usage guard's memory in
   Claude Code's own plugin storage.
 
