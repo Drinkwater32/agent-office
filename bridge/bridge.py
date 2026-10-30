@@ -11,14 +11,16 @@ Security:
 - the Host header must be exactly this bridge's own (127.0.0.1:port), so a DNS-rebinding page can't reach it; an
   Origin, when sent, must be the same origin, and a Sec-Fetch-Site, when sent, same-origin; a POST must carry that
   Origin and the token header (a custom header, so no simple cross-site form can send it);
-- a POST body is text/plain UTF-8, at most 4 KB, and at most 20 messages a minute;
+- a POST body is text/plain UTF-8, at most 4 KB, and at most 20 messages a minute (a meeting call counts as one);
+- a message that is one of the office's easter-egg codes (the same pattern hooks/eggs.ts holds) is answered and
+  dropped, never passed on: the codes are the office's own and never reach Claude;
 - only a fixed list of files is served, never a path from the request; no CORS headers, ever; a strict CSP;
 - nothing is logged per request (the URL carries the token);
 - an idle connection is dropped after 30 seconds.
 
 Files: the page's scripts and icon come from the plugin's own folder (static); the session's live files (the page,
-its style sheet, the floor plan, the list, the sprites, the conversation) from the session's run folder (root),
-outside the plugin. A file answers with an ETag and `no-cache`, so a page that polls gets a bodiless 304 while
+its style sheet, the floor plan, the list, the sprites, the conversation, the meeting) from the session's run
+folder (root), outside the plugin. A file answers with an ETag and `no-cache`, so a page that polls gets a bodiless 304 while
 nothing changed.
 
 Paths come on stdin (`--stdin`: one JSON line, {"root", "static", "heartbeat", "session", "port", "port_wait",
@@ -26,7 +28,8 @@ Paths come on stdin (`--stdin`: one JSON line, {"root", "static", "heartbeat", "
 a manual run.
 
 Out: one JSON line per event on stdout: {"ready": true, "port": N, "token": "..."} once listening, then
-{"msg": "...", "cid": "..."} for each accepted message.
+{"msg": "...", "cid": "..."} for each accepted message ("meet": true added when it was sent with "Say in meeting" on),
+and {"call": {"topic": "..."}} for "Call a meeting".
 """
 import argparse
 import errno
@@ -55,8 +58,11 @@ FILES = {
     'staff.js': (JS, 'run'),
     'sprites.js': (JS, 'run'),
     'convo.js': (JS, 'run'),
+    'meeting.js': (JS, 'run'),
     'engine.js': (JS, 'static'),
     'frontdesk.js': (JS, 'static'),
+    'conference.js': (JS, 'static'),
+    'extras.js': (JS, 'static'),
     'icon.png': ('image/png', 'static'),
 }
 RUN_FILES = {n for n, (_, where) in FILES.items() if where == 'run'}
@@ -66,10 +72,17 @@ CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self';
 CID = re.compile(r'^[a-z0-9]{1,24}$')
 TOKEN = re.compile(r'^[A-Za-z0-9_-]{43,128}$')
 BAD_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+# the office's easter-egg codes typed at the front desk (hooks/eggs.ts holds the same): dropped here, never emitted
+EGG_CODES = [re.compile(r'^\s*/confetti\s*$', re.I)]
+TOPIC_MAX = 200
+
+
+def is_egg(text):
+    return len(text) <= 40 and any(p.match(text) for p in EGG_CODES)
 # what a request without the right token gets when it asked for the page: why, and what to do (no data at all)
 EXPIRED = (b'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
            b'<title>Agent Office</title><h1>This office link no longer works</h1>'
-           b'<p>It belongs to an earlier session. Run /office-popout in Claude Code to open a fresh one.</p>')
+           b'<p>It belongs to an earlier session. Run /office in Claude Code to open a fresh one.</p>')
 
 OUT_LOCK = threading.Lock()
 
@@ -148,7 +161,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def deny(self, code, why, body=None, ctype='text/plain; charset=utf-8'):
         self.close_connection = True
+        self.drain()
         self.answer(code, body if body is not None else why.encode(), ctype)
+
+    def drain(self):
+        # a POST refused before its body was read: read a small body first, so closing the connection doesn't reset it
+        # before the client has the answer (Windows does). A body over the cap is left alone.
+        if self.command != 'POST' or getattr(self, 'body_read', False):
+            return
+        self.body_read = True
+        try:
+            n = int(self.headers.get('Content-Length', ''))
+        except ValueError:
+            return
+        if 0 < n <= MAX_BODY:
+            try:
+                self.rfile.read(n)
+            except OSError:
+                pass
 
     # -- checks shared by every method: the Host, the Origin, the fetch site
     def same_origin(self):
@@ -200,7 +230,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.deny(403, 'forbidden')
         if not self.token_ok(self.headers.get('X-Office-Token', '')):
             return self.deny(401, 'token required')
-        if urlsplit(self.path).path != '/send':
+        path = urlsplit(self.path).path
+        if path not in ('/send', '/meeting'):
             return self.deny(404, 'not found')
         ctype = self.headers.get('Content-Type', '').split(';')[0].strip().lower()
         if ctype != 'text/plain':
@@ -212,6 +243,7 @@ class Handler(BaseHTTPRequestHandler):
         if n < 0 or n > MAX_BODY:
             return self.deny(413, 'too long')
         raw = self.rfile.read(n)
+        self.body_read = True
         try:
             text = raw.decode('utf-8')
         except UnicodeDecodeError:
@@ -219,6 +251,19 @@ class Handler(BaseHTTPRequestHandler):
         text = BAD_CHARS.sub('', text.replace('\r\n', '\n')).strip()
         if not text:
             return self.deny(400, 'empty')
+        call = None
+        if path == '/meeting':          # "Call a meeting" in the office: {"topic": "..."} (the topic is optional)
+            try:
+                got = json.loads(text)
+            except ValueError:
+                return self.deny(400, 'json only')
+            topic = got.get('topic', '') if isinstance(got, dict) else None
+            if not isinstance(topic, str) or len(topic) > TOPIC_MAX:
+                return self.deny(400, 'a topic of 200 characters at most')
+            call = {'topic': topic}
+        elif is_egg(text):              # an easter egg's code: the office's own, never passed on to Claude
+            return self.answer(200, b'{"ok":true,"egg":true}', 'application/json')
+        meet = self.headers.get('X-Office-Mode', '') == 'meeting'
         cid = self.headers.get('X-Office-Cid', '')
         if not CID.match(cid):
             cid = ''
@@ -228,7 +273,10 @@ class Handler(BaseHTTPRequestHandler):
             if len(s.sent) >= RATE:
                 return self.deny(429, 'slow down')
             s.sent.append(now)
-        emit({'msg': text, 'cid': cid})
+        if call is not None:
+            emit({'call': call})
+        else:
+            emit({'msg': text, 'cid': cid, 'meet': True} if meet else {'msg': text, 'cid': cid})
         self.answer(200, b'{"ok":true}', 'application/json')
 
     def do_OPTIONS(self):

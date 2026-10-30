@@ -26,7 +26,17 @@ export type OfficeConfig = {
   routing: 'match' | 'round-robin'
   staff: Staff[]
   pets: Pet[]
+  usage: UsageConfig
+  deadline?: Deadline
+  seasons: boolean
+  openOnStart: boolean       // the browser window opens as a session starts
 }
+// the usage guard: a warning (and a handoff asked of Claude) at warnAt %, the office closed at closeAt %; the handoff
+// file relative to the project's folder (or absolute), '' for no handoff prompt
+export type UsageConfig = { warnAt: number; closeAt: number; handoffFile: string }
+// the whiteboard's countdown: a label, and a date and time on this machine's clock
+export type Deadline = { label: string; y: number; mo: number; d: number; h: number; mi: number }
+export const DEFAULT_USAGE: UsageConfig = { warnAt: 90, closeAt: 98, handoffFile: 'HANDOFF.md' }
 
 export const MAX_DEPARTMENTS = 8
 export const MAX_STAFF = 12
@@ -72,6 +82,9 @@ export function defaultConfig(): OfficeConfig {
     routing: 'match',
     staff: STAFF_LOOKS.slice(0, 6).map(look => ({ name: '', look })),
     pets: [{ name: 'Cat', coat: 'short', color: 'orange' }, { name: 'Kitten', coat: 'long', color: 'cream' }],
+    usage: { ...DEFAULT_USAGE },
+    seasons: true,
+    openOnStart: true,
   }
 }
 
@@ -83,6 +96,9 @@ export const EXAMPLE_CONFIG = {
   routing: 'match',
   staff: [{ name: '' }, { name: '' }, { name: '' }, { name: '' }, { name: '' }, { name: '' }],
   pets: [{ name: 'Cat', coat: 'short', color: 'orange' }, { name: 'Kitten', coat: 'long', color: 'cream' }],
+  usage: { ...DEFAULT_USAGE },
+  seasons: true,
+  openOnStart: true,
 }
 
 // -- checks
@@ -184,7 +200,9 @@ export function parseConfig(text: string | undefined): { config: OfficeConfig; w
     return { config, warnings }
   }
   for (const k of Object.keys(raw)) {
-    if (!['owner', 'departments', 'routing', 'staff', 'pets', '$schema', '//'].includes(k)) warn(`Unknown field "${clip(k)}" ignored.`)
+    if (!['owner', 'departments', 'routing', 'staff', 'pets', 'usage', 'deadline', 'seasons', 'openOnStart', '$schema', '//'].includes(k)) {
+      warn(`Unknown field "${clip(k)}" ignored.`)
+    }
   }
 
   // the owner: "You" unless named
@@ -274,8 +292,71 @@ export function parseConfig(text: string | undefined): { config: OfficeConfig; w
       config.pets = list
     }
   }
+
+  if (raw.usage !== undefined) config.usage = usageOf(raw.usage, warn)
+  if (raw.deadline !== undefined && raw.deadline !== null) config.deadline = deadlineOf(raw.deadline, warn)
+  if (raw.seasons !== undefined) {
+    if (typeof raw.seasons === 'boolean') config.seasons = raw.seasons
+    else warn('seasons: true or false.')
+  }
+  if (raw.openOnStart !== undefined) {
+    if (typeof raw.openOnStart === 'boolean') config.openOnStart = raw.openOnStart
+    else warn('openOnStart: true or false.')
+  }
   return { config, warnings }
 }
+
+// The usage guard's settings: whole percentages, the warning before the close. The handoff file is a plain path to a
+// .md or .txt file, relative to the project's folder or absolute, with no ".." in it; "" (or null) asks for no handoff.
+const HANDOFF_FILE = /^[^\u0000-\u001f\u007f"'`<>|*?]{1,200}\.(md|markdown|txt)$/i
+function usageOf(v: unknown, warn: (s: string) => void): UsageConfig {
+  const out: UsageConfig = { ...DEFAULT_USAGE }
+  if (!isObj(v)) {
+    warn('usage: must be an object; using the defaults.')
+    return out
+  }
+  for (const k of Object.keys(v)) if (!['warnAt', 'closeAt', 'handoffFile'].includes(k)) warn(`usage: unknown field "${clip(k)}" ignored.`)
+  const whole = (n: unknown, lo: number, hi: number) => typeof n === 'number' && Number.isInteger(n) && n >= lo && n <= hi
+  if (v.warnAt !== undefined) {
+    if (whole(v.warnAt, 50, 99)) out.warnAt = v.warnAt as number
+    else warn('usage.warnAt: a whole number from 50 to 99.')
+  }
+  if (v.closeAt !== undefined) {
+    if (whole(v.closeAt, 51, 100)) out.closeAt = v.closeAt as number
+    else warn('usage.closeAt: a whole number from 51 to 100.')
+  }
+  if (out.closeAt <= out.warnAt) {
+    warn(`usage: the close (${out.closeAt}) has to come after the warning (${out.warnAt}); using ` +
+      `${DEFAULT_USAGE.warnAt} and ${DEFAULT_USAGE.closeAt}.`)
+    out.warnAt = DEFAULT_USAGE.warnAt
+    out.closeAt = DEFAULT_USAGE.closeAt
+  }
+  if (v.handoffFile === null || v.handoffFile === '') out.handoffFile = ''
+  else if (v.handoffFile !== undefined) {
+    const f = typeof v.handoffFile === 'string' ? v.handoffFile.trim() : ''
+    if (HANDOFF_FILE.test(f) && !f.split(/[\\/]/).includes('..')) out.handoffFile = f
+    else warn('usage.handoffFile: a path to a .md or .txt file (no ".." in it), or "" for no handoff.')
+  }
+  return out
+}
+
+// The whiteboard's countdown: { label, at: "2026-12-01" or "2026-12-01T17:00" }, on this machine's clock.
+const WHEN = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?$/
+function deadlineOf(v: unknown, warn: (s: string) => void): Deadline | undefined {
+  if (!isObj(v)) return void warn('deadline: an object with "label" and "at".')
+  const label = nameOf(v.label, 16, 'deadline.label', warn) ?? 'Deadline'
+  const m = typeof v.at === 'string' ? WHEN.exec(v.at.trim()) : null
+  if (!m) return void warn('deadline.at: a date, "2026-12-01", or a date and time, "2026-12-01T17:00".')
+  const [y, mo, d, h, mi] = [+m[1]!, +m[2]!, +m[3]!, +(m[4] ?? 0), +(m[5] ?? 0)]
+  const real = new Date(y, mo - 1, d, h, mi)
+  if (h > 23 || mi > 59 || real.getMonth() !== mo - 1 || real.getDate() !== d) return void warn('deadline.at: not a real date.')
+  return { label, y, mo, d, h, mi }
+}
+export const deadlineAt = (d: Deadline) => new Date(d.y, d.mo - 1, d.d, d.h, d.mi).getTime()
+
+/** A name as an id: lowercase letters, digits and dashes, 24 at most ('' when nothing is left). */
+export const slug = (s: string) => s.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24)
+  .replace(/-+$/, '')
 
 /**
  * Which department an agent goes to. "match": the first department listing its agent type, else the one whose

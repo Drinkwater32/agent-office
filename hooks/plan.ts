@@ -26,8 +26,13 @@ export type Plan = {
   cfg: OfficeConfig
   depts: Dept[]
   OX: number                         // how far right the fixed rooms sit, past the departments
-  AW: number                         // the drawing's width in art pixels
-  den: Room; lobby: Room; kitchen: Room; lounge: Room
+  AW: number                         // the drawing's width in art pixels (the browser window's, the conference room in)
+  PW: number                         // the pane's width: everything west of the conference room
+  den: Room; lobby: Room; kitchen: Room; lounge: Room; conf: Room
+  // the conference room's chairs (0 the head, Claude's; 1 the foot, yours; then the sides from the head down), and
+  // where each attendee walks in from: you from your chair, Claude from the front desk, a department from its room
+  confSeats: { node: string; dir: Dir }[]
+  confFrom: Record<string, string>
   nodes: Record<string, Pt>
   edges: [string, string][]
   overflow: Record<string, string[]>
@@ -44,6 +49,10 @@ export type Plan = {
 export const AH = 196
 export const SHIFT = 20   // your office and the lobby are drawn as they were at x 145 and moved over this far
 export const DY = 8       // the lobby and the lounge are drawn as they were at y 83 and moved down this far
+// the conference room, east of the kitchen and the lounge, the office's whole height: its width, its wall's depth, the
+// table's middle and edges (from the room's west wall), the side chairs' rows, the sitters' and the aisles' x
+export const CONF = { w: 92, face: 28, mid: 46, table: [34, 58], rows: [72, 96, 120, 144], sitW: 27, sitE: 65, aisleW: 10,
+  aisleE: 82 } as const
 
 const LOOKS = [
   { wall: '#45307c', floor: 'nr-oak' }, { wall: '#5e2a3c', floor: 'nr-carpet' }, { wall: '#e9dcc2', floor: 'nr-birch' },
@@ -75,7 +84,8 @@ export function buildPlan(cfg: OfficeConfig): Plan {
   const colW = Math.floor((blockW - 3 * (cols - 1)) / cols)
   const extra = blockW - 3 * (cols - 1) - colW * cols
   const OX = 3 + blockW - 162
-  const AW = 344 + OX
+  const PW = 344 + OX
+  const AW = PW + CONF.w + 3
 
   // the department rooms, numbered in reading order: the tall room (with an odd count), then the top row left to
   // right, then the bottom row
@@ -234,6 +244,36 @@ export function buildPlan(cfg: OfficeConfig): Plan {
   link('break-w', 'break-bba')
   link(`${lastTop.id}-pb`, 'den-gate', 'den-door', 'den-in', 'den-mid', 'den-side', 'den-owner')
   link('den-side', 'den-perch')
+  nodes['den-seat'] = X([211, 44])                  // your chair, for a meeting: you get up from it
+  link('den-mid', 'den-seat')
+
+  // the conference room: in by its door from the lounge, an aisle down each side, a chair off each aisle facing the
+  // table, the head's chair off the west aisle's top, the foot's off the walkway along the bottom. Only a meeting's
+  // attendees go in (no spot or home is in here), so nobody else's route passes through it.
+  const conf: Room = { x: PW, y: 3, w: CONF.w, h: 190, face: CONF.face }
+  const cx = (dx: number) => PW + dx
+  const cNodes: Record<string, Pt> = {
+    'conf-dw': [336 + OX, 163], 'cw-d': [cx(CONF.aisleW), 163], 'cw-h': [cx(CONF.aisleW), 50], 'cw-b': [cx(CONF.aisleW), 189],
+    'ce-b': [cx(CONF.aisleE), 189], 'cs-h': [cx(CONF.mid), 50], 'cs-f': [cx(CONF.mid), 186],
+  }
+  Object.assign(nodes, cNodes)
+  CONF.rows.forEach((y, i) => {
+    nodes[`cw-${i}`] = [cx(CONF.aisleW), y]
+    nodes[`ce-${i}`] = [cx(CONF.aisleE), y]
+    nodes[`cs-w${i}`] = [cx(CONF.sitW), y]
+    nodes[`cs-e${i}`] = [cx(CONF.sitE), y]
+    link(`cw-${i}`, `cs-w${i}`)
+    link(`ce-${i}`, `cs-e${i}`)
+  })
+  link('break-rb', 'conf-dw', 'cw-d')
+  link('cw-h', 'cw-0', 'cw-1', 'cw-2', 'cw-3', 'cw-d', 'cw-b', 'ce-b', 'ce-3', 'ce-2', 'ce-1', 'ce-0')
+  link('cw-h', 'cs-h')
+  link('cw-b', 'cs-f')
+  const confSeats: Plan['confSeats'] = [{ node: 'cs-h', dir: 'down' }, { node: 'cs-f', dir: 'up' }]
+  CONF.rows.forEach((_, i) => confSeats.push({ node: `cs-w${i}`, dir: 'right' }, { node: `cs-e${i}`, dir: 'left' }))
+  const confFrom: Record<string, string> = { owner: 'den-seat', claude: 'lobby-h1' }
+  for (const d of depts) confFrom[d.id] = `${d.id}-pb`
+
   doors.push({ x: 162 + OX, y: 124, h: 15, color: '#9a88c0' }, { x: 162 + OX, y: 62, h: 16, color: '#3b3452' })
 
   // the lounge and the kitchen: what there is to do, where you stand for it and which way you face; pairs are the
@@ -295,7 +335,7 @@ export function buildPlan(cfg: OfficeConfig): Plan {
   const pets = cfg.pets.map((p, i) => ({ ...p, i }))
 
   return {
-    cfg, depts, OX, AW, den, lobby, kitchen, lounge, nodes, edges, overflow, doors, crew, visitor: crew[0], dropped,
+    cfg, depts, OX, AW, PW, den, lobby, kitchen, lounge, conf, confSeats, confFrom, nodes, edges, overflow, doors, crew, visitor: crew[0], dropped,
     spots, pets,
     cat: { nodes: catNodes, edges: catEdges, jumps: [['c-den-under', 'c-den-desk']], spots: catSpots,
       start: pets.map((_, i) => starts[i % starts.length]!) },

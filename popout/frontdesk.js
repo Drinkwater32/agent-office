@@ -283,8 +283,9 @@
       if (mins >= 1) text += ` · ${mins}m`
     }
     if (agentsOut) text += ` · ${agentsOut} agent${agentsOut === 1 ? '' : 's'} out`
+    if (closedWords) text = closedWords + (agentsOut ? ` · ${agentsOut} agent${agentsOut === 1 ? '' : 's'} out` : '')
     el.textContent = text
-    el.className = 'status ' + (busy ? 'busy' : 'idle')
+    el.className = 'status ' + (closedWords ? 'shut' : busy ? 'busy' : 'idle')
   }
 
   // -- reading the conversation
@@ -383,7 +384,7 @@
     if (!LIVE) return
     isOnline = on
     off.hidden = on
-    off.textContent = on ? '' : 'The bridge is not answering. Run /office-popout in Claude Code again.'
+    off.textContent = on ? '' : 'The bridge is not answering. Run /office in Claude Code again.'
     send.disabled = !on
   }
   if (LIVE) {
@@ -452,15 +453,36 @@
     e.preventDefault()
     submit()
   })
+  // the office's easter-egg codes (layout.js, from hooks/eggs.ts): one typed here plays in the office and is never sent
+  const EGG_CODES = []
+  const codes = CFG0.eggs && CFG0.eggs.codes && typeof CFG0.eggs.codes === 'object' ? CFG0.eggs.codes : {}
+  for (const name of Object.keys(codes)) {
+    try { EGG_CODES.push([name, new RegExp(String(codes[name]), 'i')]) } catch (e) { /* a bad pattern catches nothing */ }
+  }
+  function eggOf(text) {
+    if (text.length > 40) return ''
+    const hit = EGG_CODES.find(([, re]) => re.test(text))
+    return hit ? hit[0] : ''
+  }
   async function submit() {
     const text = box.value.replace(/\s+$/, '').replace(/^\s+/, '')
-    if (!text || !LIVE || !isOnline) return
-    if (bytes(text) > 4096) {
+    if (!text) return
+    const egg = eggOf(text)
+    if (egg) {                               // the office's own: played here, never sent to Claude
+      box.value = ''
+      saveDraft()
+      grow()
+      if (office() && office().egg) office().egg(egg)
+      return
+    }
+    if (!LIVE || !isOnline) return
+    const meet = meetOn && meetLive
+    if (bytes(text) > 4096 - (meet ? MEET_PREFIX.length * 3 : 0)) {
       grow()
       return
     }
     const cid = Math.random().toString(36).slice(2, 12) + Date.now().toString(36).slice(-4)
-    const p = { cid, text, at: Date.now(), status: 'sending' }
+    const p = { cid, text: meet ? MEET_PREFIX + text : text, at: Date.now(), status: 'sending' }
     pending.push(p)
     sentHere.add(cid)
     box.value = ''
@@ -468,10 +490,11 @@
     grow()
     render()
     log.scrollTop = log.scrollHeight
-    if (office()) office().ownerSaid(text)
+    if (office() && !meet) office().ownerSaid(text)
+    const headers = { 'Content-Type': 'text/plain;charset=utf-8', 'X-Office-Token': KEY, 'X-Office-Cid': cid }
+    if (meet) headers['X-Office-Mode'] = 'meeting'          // the plugin adds "[Meeting] <your name>: ", while one is on
     try {
-      const r = await fetch('send', { method: 'POST', credentials: 'omit', cache: 'no-store',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8', 'X-Office-Token': KEY, 'X-Office-Cid': cid }, body: text })
+      const r = await fetch('send', { method: 'POST', credentials: 'omit', cache: 'no-store', headers, body: text })
       if (!r.ok) {
         p.status = 'failed'
         p.why = r.status === 429 ? 'Not sent: too many at once. Try again in a minute.' : `Not sent (${r.status}).`
@@ -488,6 +511,65 @@
     poll()
     retryReload()
   }
+
+  // -- "Say in meeting": while a meeting is on (conference.js says so), a toggle at the top of the chat box. On, what
+  // you send reaches Claude as your line in the meeting, "[Meeting] <your name>: ..." (the plugin adds the words, and
+  // only while a meeting is really on); Claude records it in the transcript. Off, or with no meeting on, the chat is as
+  // it always was.
+  const MEET_PREFIX = `[Meeting] ${OWNER}: `
+  let meetOn = false
+  let meetLive = false
+  const meetBtn = document.createElement('button')
+  meetBtn.type = 'button'
+  meetBtn.className = 'meet-say'
+  meetBtn.id = 'fd-meet'
+  meetBtn.hidden = true
+  meetBtn.setAttribute('aria-pressed', 'false')
+  const meetDot = document.createElement('i')
+  const meetWord = document.createElement('span')
+  meetWord.textContent = 'Say in meeting'
+  const meetState = document.createElement('b')
+  meetBtn.append(meetDot, meetWord, meetState)
+  if (form) form.insertBefore(meetBtn, form.firstChild)
+  let closedWords = ''
+  let openAgain = false
+  function placeholder() {
+    box.setAttribute('placeholder', closedWords || (meetOn && meetLive ? 'Say it in the meeting' : openAgain ? 'The office is open again' : 'Message Claude'))
+  }
+  function meetShow() {
+    meetBtn.hidden = !meetLive
+    meetBtn.setAttribute('aria-pressed', meetOn && meetLive ? 'true' : 'false')
+    meetState.textContent = meetOn && meetLive ? 'On' : 'Off'
+    placeholder()
+  }
+  meetBtn.addEventListener('click', () => {
+    meetOn = !meetOn
+    meetShow()
+    box.focus({ preventScroll: true })
+  })
+  window.__aoMeetSay = {
+    live(on) {
+      meetLive = !!on
+      if (!meetLive) meetOn = false
+      meetShow()
+    },
+    set(on) {
+      meetOn = !!on && meetLive
+      meetShow()
+    },
+    get on() { return meetOn && meetLive },
+    focus() { box.focus({ preventScroll: true }) },
+  }
+  // the usage guard: the chat box says when the office is closed (the status line too), and when it opened again
+  document.addEventListener('nr:data', e => {
+    const u = e.detail && e.detail.data && e.detail.data.usage
+    if (!u || typeof u !== 'object') return
+    const until = typeof u.until === 'string' && /^\d{1,2}:\d{2} [AP]M$/.test(u.until) ? u.until : ''
+    closedWords = u.closed === true ? `Office closed${until ? ` until ${until}` : ''}` : ''
+    openAgain = u.reopened === true
+    placeholder()
+    status()
+  })
 
   // -- the desk in and out: closed, it is a bell on the office's edge with a count of Claude's unread replies; open,
   // it swings out. Clicking Claude at the front desk opens it too.

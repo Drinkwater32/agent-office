@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 const PANE = {
   plugin: 'agent-office',
@@ -35,5 +35,16 @@ test('an agent in the stored list shows under its department', async ($, on) => 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /At their desks/ }))?.text).toBe('At their desks (1)')
   expect((await ui.find({ type: 'Text', text: /Review the login flow/ }))?.text).toMatch(/^Review +Review the login flow/)
+  await ui.unmount()
+})
+
+test('the pane leads with the usage gauge, and says when the office is closed', async ($, on) => {
+  on('clock.now', () => ({ value: NOW }))
+  const resets = new Date(NOW + 3_600_000).toISOString()
+  mock.store(on, { usageMem: { warned: ['five_hour|' + resets], last: [{ kind: 'five_hour', percentUsed: 99, resetsAt: resets }],
+    closed: { kind: 'five_hour', key: 'five_hour|' + resets, at: NOW, why: 'limit', until: NOW + 3_600_000 } } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /^Office closed until \d{1,2}:\d{2} [AP]M/ }))?.text).toMatch(/until/)
+  expect((await ui.find({ type: 'Text', text: /^5-hour 99%$/ }))?.text).toBe('5-hour 99%')
   await ui.unmount()
 })

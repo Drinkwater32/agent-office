@@ -28,8 +28,12 @@ export type ChatMsg = {
 // the session's bridge token and port, kept through a hot reload so the next bridge takes them over
 export type BridgeKeep = { token: string; port: number }
 
+// the conference room's meeting, as office_meeting_update (or a call) last wrote it: plain JSON, checked again
+// (hooks/meeting.ts, cleanMeeting) every time it is read
+export type MeetingKept = { [key: string]: unknown } | null
+
 declare module 'claude-code' {
   interface PluginState {
-    'agent-office': { staff: Shaped<Staffer[]>; chat: Shaped<ChatMsg[]>; keep: Shaped<BridgeKeep> }
+    'agent-office': { staff: Shaped<Staffer[]>; chat: Shaped<ChatMsg[]>; keep: Shaped<BridgeKeep>; meeting: Shaped<MeetingKept> }
   }
 }

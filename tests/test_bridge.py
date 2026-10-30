@@ -5,6 +5,7 @@ import http.client
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -99,6 +100,47 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(self.post('hi \u00e9\x07 there'.encode(), **{'X-Office-Cid': 'abc123'}), 200)
         line = self.out.getvalue()[len(before):].strip().splitlines()[-1]
         self.assertEqual(json.loads(line), {'msg': 'hi \u00e9 there', 'cid': 'abc123'})
+
+    def emitted_by(self, fn):
+        before = self.out.getvalue()
+        status = fn()
+        return status, [json.loads(ln) for ln in self.out.getvalue()[len(before):].strip().splitlines() if ln]
+
+    def test_an_egg_code_is_answered_and_never_passed_on(self):
+        for code in (b'/confetti', b'  /CONFETTI ', b'/confetti\n'):
+            status, out = self.emitted_by(lambda: self.post(code))
+            self.assertEqual(status, 200)
+            self.assertEqual(out, [], code)
+        status, out = self.emitted_by(lambda: self.post(b'please /confetti'))
+        self.assertEqual(out, [{'msg': 'please /confetti', 'cid': ''}])
+
+    def test_the_egg_patterns_match_the_hooks(self):
+        # hooks/eggs.ts and bridge.py hold the same codes: a code the page somehow sends is dropped here too
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'hooks', 'eggs.ts')
+        with open(src, encoding='utf-8') as f:
+            ts = re.findall(r"^\s+\w+: '(.*)',$", f.read(), re.M)
+        self.assertEqual([p.replace('\\\\', '\\') for p in ts], [p.pattern for p in bridge.EGG_CODES])
+
+    def test_call_a_meeting(self):
+        h = {'Origin': f'http://127.0.0.1:{self.port}', 'X-Office-Token': self.token, 'Content-Type': 'text/plain'}
+        status, out = self.emitted_by(lambda: self.ask('POST', '/meeting', h, json.dumps({'topic': 'Plan the week'}).encode())[0])
+        self.assertEqual((status, out), (200, [{'call': {'topic': 'Plan the week'}}]))
+        self.assertEqual(self.ask('POST', '/meeting', h, b'not json')[0], 400)
+        self.assertEqual(self.ask('POST', '/meeting', h, json.dumps({'topic': 'x' * 201}).encode())[0], 400)
+        self.assertEqual(self.ask('POST', '/meeting', h, json.dumps({'topic': 5}).encode())[0], 400)
+        self.assertEqual(self.ask('POST', '/meeting', {**h, 'X-Office-Token': 'X' * 43}, b'{}')[0], 401)
+        self.assertEqual(self.ask('POST', '/meeting', {**h, 'Origin': 'http://evil.example'}, b'{}')[0], 403)
+
+    def test_say_in_meeting_marks_the_message(self):
+        status, out = self.emitted_by(lambda: self.post(b'I agree', **{'X-Office-Mode': 'meeting'}))
+        self.assertEqual(out, [{'msg': 'I agree', 'cid': '', 'meet': True}])
+        status, out = self.emitted_by(lambda: self.post(b'plain', **{'X-Office-Mode': 'other'}))
+        self.assertEqual(out, [{'msg': 'plain', 'cid': ''}])
+
+    def test_the_new_files_are_listed(self):
+        for name in ('meeting.js', 'conference.js', 'extras.js'):
+            self.assertIn(name, bridge.FILES)
+        self.assertIn('meeting.js', bridge.RUN_FILES)
 
     def test_settings_from_stdin(self):
         s = bridge.settings(['--stdin'], io.StringIO(json.dumps({'root': 'C:/a b/c', 'port': True, 'prune': 1}) + '\n'))

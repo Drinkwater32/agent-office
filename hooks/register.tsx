@@ -1,17 +1,25 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { ChatMsg, Staffer } from '../types'
-import { EXAMPLE_CONFIG, MAX_FILE_BYTES, parseConfig, routeAgent } from './config'
+import type { ChatMsg, MeetingKept, Staffer } from '../types'
+import { GIT_READS, GIT_SAFE, boardPrims, boardRows, mergedRead, parseBranches } from './board'
+import type { Prim } from './board'
+import { clockText, seasonOf } from './clock'
+import { EXAMPLE_CONFIG, MAX_FILE_BYTES, deadlineAt, parseConfig, routeAgent, slug } from './config'
 import type { OfficeConfig } from './config'
-import { HANDBACK_MS, agentSprites, deptOf, layoutCfg, office, pageCss, pageHtml, setPlan } from './office'
+import { eggOf } from './eggs'
+import * as M from './meeting'
+import { HANDBACK_MS, agentSprites, deptOf, layoutCfg, office, pageCss, pageHtml, plan, setPlan } from './office'
+import * as U from './usage'
 import { firstSentence, hash, json, plain, toolLabel } from './util'
 
 // agent-office: a pixel-art office in a pane beside the chat. Every agent this session starts takes a seat in the
 // department its task belongs to and works away, what it last said in a speech bubble and its latest tool on a tag
 // at its desk; when it hands back, its report lands in the inbox at the front desk, where Claude sits. The browser
-// copy (/office-popout) is the office beside a chat with Claude, served by a local bridge (bridge/bridge.py, on
-// 127.0.0.1 only, with a per-session token); it walks everyone about in its own script.
+// copy (/office) is the office beside a chat with Claude, served by a local bridge (bridge/bridge.py, on
+// 127.0.0.1 only, with a per-session token); it walks everyone about in its own script. Since 0.2: the conference
+// room's meetings (/office-meeting, the office_meeting_update tool), the usage readout and guard (/office-usage), the
+// whiteboard with the project's branches, day and night and the seasons, the pets' own antics, and a few easter eggs.
 
 const PANE = 'agent-office'
 const TITLE = 'Agent Office'
@@ -20,6 +28,8 @@ const chat = atom({ plugin: 'agent-office', key: 'chat' } as const, [], { shape:
 // the bridge's session token and port, kept for the session through a hot reload: the next bridge takes them over
 // (waiting a moment for the port), so the browser window's link keeps working
 const keep = atom({ plugin: 'agent-office', key: 'keep' } as const, { token: '', port: 0 }, { shape: 'keep-1' })
+// the conference room's meeting (the last one stays, for its transcript): checked by hooks/meeting.ts on every read
+const meeting = atom({ plugin: 'agent-office', key: 'meeting' } as const, null as MeetingKept, { shape: 'meeting-1' })
 const CHAT_KEEP = 50          // messages the window keeps
 const CHAT_CHARS = 20_000     // a message's longest text
 const POLL_MS = 3_000
@@ -49,9 +59,11 @@ async function setup($: EngineInterface): Promise<void> {
   const sessionId = await $.session.id()
   runDir = `${dataDir}/run/${sessionId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || 'session'}`
   const root = await $.session.root().catch(() => '')
+  projectRoot = root.replace(/\\/g, '/').replace(/\/+$/, '')
   folderName = (root.split(/[\\/]/).filter(Boolean).pop() ?? '').slice(0, 80)
   if (!cfg) await loadConfig($)
 }
+let projectRoot = ''          // the session's project folder: the whiteboard's git repo, the handoff file's home
 
 /** Reads the config file (a missing one is the defaults) and lays the floor plan out from it. */
 async function loadConfig($: EngineInterface): Promise<void> {
@@ -81,7 +93,8 @@ let spriteKey = ''
 let convoKey = ''
 let convoVer = ''
 let scriptStamp = ''
-const SCRIPTS = ['engine.js', 'frontdesk.js']
+const SCRIPTS = ['engine.js', 'frontdesk.js', 'conference.js', 'extras.js']
+let pageSeason = ''           // the season the page was drawn in: a new one rebuilds it (its decor is in the drawing)
 
 // whether a script changed since the page was written (a stat a poll; the page is rebuilt when one did)
 async function scriptsChanged($: EngineInterface): Promise<boolean> {
@@ -113,12 +126,16 @@ async function writePage($: EngineInterface): Promise<string> {
   await $.fs.write(`${runDir}/office.css`, css)
   await $.fs.write(`${runDir}/office.html`, pageHtml(list, now, ver, folderName))
   pageKey = key
+  pageSeason = seasonNow(now)
   spriteKey = ''
   convoKey = ''
+  meetKey = ''
   await writeConvo($)
+  await writeMeeting($, now)
   await writeStaff($, list, now)
   return `${runDir}/office.html`
 }
+const seasonNow = (now: number) => (cfg?.seasons === false ? '' : seasonOf(now))
 
 const agentId = (s: Staffer) => 'a' + hash(s.id).toString(36)
 const lookKey = (s: Staffer) => 'a' + hash(`${s.id}|${deptOf(s.desk).id}|${deptOf(s.desk).color}`).toString(36)
@@ -139,6 +156,12 @@ function staffJs(list: Staffer[], now: number, key: string): string {
       tool: toolLabel(s.tool), say: plain(s.say ?? ''), done: s.isDone, failed: s.isFailed, mins: mins(s) })),
     recent: done.slice(-6).reverse().map(s => ({ desk: deptOf(s.desk).id, task: s.task.slice(0, 240),
       failed: s.isFailed, mins: mins(s) })),
+    // the extras the page's other scripts read: the meeting's version (they fetch meeting.js when it moves), the
+    // usage readout and the guard's state (numbers and clock times only), the whiteboard's face
+    meet: meetVer,
+    usage: U.view(uMem, thresholds(), now),
+    readout: U.readout(uMem, thresholds(), ctxPct, now),
+    board: boardFace,
   }
   return `window.__aoStaff = ${json(data)};\n`
 }
@@ -152,6 +175,205 @@ async function writeStaff($: EngineInterface, list: Staffer[], now: number): Pro
     spriteKey = cast
   }
   await $.fs.write(`${runDir}/staff.js`, staffJs(list, now, pageKey))
+}
+
+// -- the usage guard and readout (hooks/usage.ts decides). The readings come from session.measure (after each main
+// turn, and whenever a window moves a whole point) and $.session.usage(); nothing polls the API. At the config's
+// warnAt, once a window cycle, Claude is asked to rewrite the one handoff file; at closeAt, or when the API refuses a
+// turn for the rate limit, the office closes until the window resets. What was decided is kept in the plugin's store
+// (`usageMem`), so a reload never repeats a warning. The prompt and the page carry percentages and times only.
+let ctxPct: number | null = null
+let uMem: U.UsageMem = { ...U.EMPTY_MEM }
+let uLoaded = false
+let uChain: Promise<unknown> = Promise.resolve()
+let uSaving = false
+const thresholds = (): U.Thresholds => ({ warnAt: cfg?.usage.warnAt ?? 90, closeAt: cfg?.usage.closeAt ?? 98 })
+async function usageLoad($: EngineInterface): Promise<void> {
+  if (uLoaded) return
+  uMem = U.cleanMem(await $.store.get('usageMem').catch(() => undefined))
+  uLoaded = true
+}
+// the handoff file: the config's, relative to the project's folder unless it is absolute; '' for none
+function handoffPath(): string {
+  const f = (cfg?.usage.handoffFile ?? '').replace(/\\/g, '/')
+  if (!f) return ''
+  return /^([A-Za-z]:\/|\/)/.test(f) ? f : `${projectRoot || '.'}/${f.replace(/^(\.\/)+/, '')}`
+}
+// one decision at a time (a reading, the poll, an error, a reply): load, decide, keep, act
+function usageRun($: EngineInterface, decide: (m: U.UsageMem, now: number) => U.Step): Promise<void> {
+  const run = uChain.then(async () => {
+    await usageLoad($)
+    const now: number = await $.clock.now()
+    const before = JSON.stringify(uMem)
+    const s = decide(uMem, now)
+    uMem = s.mem
+    if (JSON.stringify(uMem) !== before) await $.store.set('usageMem', uMem).catch(() => undefined)
+    await usageAct($, s, now)
+  })
+  uChain = run.catch(() => undefined)
+  return run
+}
+async function usageAct($: EngineInterface, s: U.Step, now: number): Promise<void> {
+  if (!s.warn && !s.close && !s.reopen) return
+  if (s.reopen) void $.ui.toast('The office is open again.')
+  if (s.close) {
+    const until = uMem.closed?.until ? ` until ${clockText(uMem.closed.until)}` : ''
+    void $.ui.toast(`The office is closed${until}: usage ${s.close.percentUsed >= 100 ? 'limit reached' : `at ${U.pctLabel(s.close.percentUsed)}`}.`)
+  }
+  if (s.warn) {                     // a turn of its own, once Claude is idle (queued behind a running turn)
+    const path = handoffPath()
+    if (path) {
+      void $.prompt.submit({ text: U.handoffPrompt(s.warn, now, cfg?.usage.handoffFile ?? '', path) }).catch(() => {
+        void $.ui.toast('The office could not ask Claude for the handoff. Ask for it yourself.')
+      })
+    } else if (!s.close) void $.ui.toast(`Usage at ${U.pctLabel(s.warn.percentUsed)} of the ${U.kindLabel(s.warn.kind)} limit.`)
+  }
+  await pushOffice($, now)
+}
+// the handoff was asked for: saved once the file is newer than the ask (or Claude says so)
+async function usageSaved($: EngineInterface, by?: 'reply'): Promise<void> {
+  if (uSaving || !uMem.asked || U.isSaved(uMem)) return
+  uSaving = true
+  try {
+    let at = 0
+    if (by === 'reply') at = await $.clock.now()
+    else {
+      const path = handoffPath()
+      const st = path ? await $.fs.stat(path).catch(() => undefined) : undefined
+      if (st && st.mtimeMs >= uMem.asked) at = st.mtimeMs
+    }
+    if (at) await usageRun($, m => ({ mem: { ...m, saved: Math.max(at, m.asked ?? at) } }))
+  } finally {
+    uSaving = false
+  }
+}
+// the context window's fill, as a reading gave it (the pane redraws when it moves)
+async function ctxSeen($: EngineInterface, pct: unknown): Promise<void> {
+  if (!U.ctxOk(pct)) return
+  const n = Math.round(pct)
+  if (n === ctxPct) return
+  ctxPct = n
+  await update($, staff, l => [...l])
+}
+// what the page shows of it moved: the live list now, so open pages read it at once
+async function pushOffice($: EngineInterface, now: number): Promise<void> {
+  if (!pageKey) return
+  await writeStaff($, await read($, staff), now).catch(err => writeFailed($, err))
+}
+
+// -- the conference room (hooks/meeting.ts checks everything): the meeting lives in the session's state, written by
+// the office_meeting_update tool or a call (/office-meeting, the office's "Call a meeting"). The page reads the run
+// folder's meeting.js when the live list says its version moved: the attendees walk to the conference room, the
+// speaker's words show in a bubble, the screen and the front desk's Meeting tab fill in.
+let meetKey = ''
+let meetVer = ''
+let calling = false
+/** Who can attend, from the config: the departments and the staff at their desks, each with an id of its name. */
+function meetCtx(): M.MeetCtx {
+  const c = cfg ?? parseConfig(undefined).config
+  const used = new Set(['claude', 'owner', 'chair', 'you'])
+  const uniq = (k: string) => {
+    let key = k
+    for (let n = 2; used.has(key); n++) key = `${k.slice(0, 21)}-${n}`
+    used.add(key)
+    return key
+  }
+  let unnamed = 0
+  return {
+    owner: c.owner.name,
+    depts: plan().depts.map((d, i) => ({ id: d.id, key: uniq(slug(d.name) || `dept-${i + 1}`), name: d.name, color: d.color })),
+    staff: plan().crew.map(s => {
+      const n = s.name ? '' : String(++unnamed)
+      return { id: s.id, key: uniq(s.name ? slug(s.name) || `teammate-${n}` : `teammate-${n}`), name: s.name || `Teammate ${n}`, dept: s.dept.id }
+    }),
+  }
+}
+async function readMeet($: EngineInterface): Promise<M.Meeting | undefined> {
+  const v = await read($, meeting).catch(() => null)
+  return v ? M.cleanMeeting(v, meetCtx()) : undefined
+}
+async function keepMeet($: EngineInterface, m: M.Meeting): Promise<void> {
+  await update($, meeting, () => JSON.parse(JSON.stringify(m)) as MeetingKept)
+}
+// the page's copy (meeting.js), when it changed: the live list carries its version
+async function writeMeeting($: EngineInterface, now: number): Promise<void> {
+  if (!pageKey) return
+  const view = M.meetingView(await readMeet($), now, meetCtx())
+  const j = json(view)
+  const k = hash(j).toString(36)
+  if (k === meetKey) return
+  await $.fs.write(`${runDir}/meeting.js`, `window.__aoMeeting = ${j};\n`)
+  meetKey = k
+  meetVer = view ? k : ''
+}
+async function meetingChanged($: EngineInterface, now: number): Promise<void> {
+  await writeMeeting($, now).catch(err => writeFailed($, err))
+  await pushOffice($, now)
+}
+async function meetingUpdate($: EngineInterface, args: Record<string, unknown>): Promise<string> {
+  await setup($)
+  const now: number = await $.clock.now()
+  const r = M.mergeMeeting(await readMeet($), args, meetCtx(), now)
+  await keepMeet($, r.meeting)
+  await meetingChanged($, now)
+  return M.mergeReport(r)
+}
+// a meeting called: one at a time; the topic is the user's words, capped and kept as one line of text. The meeting
+// is "scheduled", and Claude gets the protocol's prompt (queued behind a running turn).
+async function callMeetingNow($: EngineInterface, topic: unknown): Promise<string> {
+  if (calling) return 'A meeting is being called right now.'
+  calling = true
+  try {
+    await setup($)
+    const now: number = await $.clock.now()
+    const ctx = meetCtx()
+    const r = M.callMeeting(await readMeet($), topic, ctx, now)
+    if ('busy' in r) return r.busy
+    await keepMeet($, r.meeting)
+    await meetingChanged($, now)
+    void $.prompt.submit({ text: M.meetPrompt(r.meeting.title, ctx) }).catch(() => {
+      void $.ui.toast('The meeting could not reach Claude. Ask Claude to run it.')
+    })
+    return `Meeting called: "${r.meeting.title}". Claude runs it in the conference room (after the current task, if busy). ` +
+      "Watch it in the office's browser window (/office): the Meeting tab at the front desk."
+  } finally {
+    calling = false
+  }
+}
+
+// -- the whiteboard: the project's branches (read-only git, never through a shell, once a minute while a page is
+// open) and the config's countdown
+let boardFace: Prim[] = []
+let boardAt = 0
+let boardBusy = false
+async function gitRun($: EngineInterface, args: string[]): Promise<string | undefined> {
+  if (!projectRoot) return undefined
+  try {
+    const r = await $.process.run(['git', '-C', projectRoot, ...GIT_SAFE, ...args], { timeoutMs: 15_000 })
+    return r.exitCode === 0 ? r.stdout.slice(0, 200_000) : undefined
+  } catch {
+    return undefined
+  }
+}
+async function refreshBoard($: EngineInterface, now: number, force = false): Promise<void> {
+  if (boardBusy || (!force && now - boardAt < 60_000)) return
+  boardBusy = true
+  boardAt = now
+  try {
+    const outs: (string | undefined)[] = []
+    for (const a of GIT_READS) outs.push(await gitRun($, a))
+    const b = parseBranches(outs)
+    const mr = b?.base ? mergedRead(b.base) : undefined
+    const merged = mr ? await gitRun($, mr) : undefined
+    const list: Staffer[] = await read($, staff)
+    const { rows, why } = boardRows(b, merged, list.map(s => ({ task: s.task, desk: deptOf(s.desk).id, done: s.isDone })), now)
+    const colors: Record<string, string> = { claude: M.CHAIR_COLOR }
+    for (const d of plan().depts) colors[d.id] = d.color
+    const dl = cfg?.deadline ? { label: cfg.deadline.label, at: deadlineAt(cfg.deadline) } : undefined
+    boardFace = boardPrims(rows, why, dl, now, colors)
+  } finally {
+    boardBusy = false
+  }
 }
 
 // -- the conversation: what the window shows of the main session. Whether Claude is mid-turn lives here (a reload
@@ -299,7 +521,7 @@ function startBridge($: EngineInterface): void {
 }
 
 async function bridgeLine($: EngineInterface, line: string): Promise<boolean> {
-  let m: { ready?: boolean; port?: number; token?: string; msg?: string; cid?: string }
+  let m: { ready?: boolean; port?: number; token?: string; msg?: string; cid?: string; meet?: unknown; call?: unknown }
   try {
     m = JSON.parse(line)
   } catch {
@@ -314,9 +536,17 @@ async function bridgeLine($: EngineInterface, line: string): Promise<boolean> {
     await writeConvo($)
     return true
   }
+  if (m.call && typeof m.call === 'object') {               // "Call a meeting" in the office (the bridge checked it)
+    await callMeetingNow($, (m.call as { topic?: unknown }).topic).catch(() => undefined)
+    return true
+  }
   if (typeof m.msg === 'string' && m.msg.trim()) {
-    const text = m.msg.slice(0, 4096)
+    const said = m.msg.slice(0, 4096)
+    if (eggOf(said)) return true                               // an easter egg's code: the office's own, never Claude's
+    let text = said
+    if (m.meet === true && M.isLive(await readMeet($), await $.clock.now())) text = M.meetingLine(said, meetCtx())
     const cid = typeof m.cid === 'string' && /^[a-z0-9]{1,24}$/.test(m.cid) ? m.cid : undefined
+    usageSpoke($)
     const id = await addMsg($, { who: 'owner', text, via: 'window', state: busy ? 'queued' : 'sent', cid })
     void $.prompt.submit({ text, asUser: true }).catch(async () => {   // never reached Claude: say so in the window
       await update($, chat, l => l.map(x => (x.id === id ? { ...x, state: 'failed' as const } : x)))
@@ -328,40 +558,54 @@ async function bridgeLine($: EngineInterface, line: string): Promise<boolean> {
 }
 
 // -- opening the browser: on Windows through the URL handler (rundll32 url.dll,FileProtocolHandler), which takes the
-// whole URL, query string and all, as one argument; `open` on macOS; `xdg-open` elsewhere. Never through a shell.
+// whole URL, query string and all, as one argument; `open` on macOS; on Linux `xdg-open`, else `gio open`, else
+// `sensible-browser`. Never through a shell. Windows' handler gives no answer either way, so there it counts as opened.
 let isMac: boolean | undefined
 async function openUrl($: EngineInterface, url: string): Promise<boolean> {
   if (!/^(http:\/\/127\.0\.0\.1:\d{1,5}\/|file:\/\/\/)[^\s"<>]*$/.test(url)) return false
-  let argv: string[]
-  if (isWindows) argv = ['rundll32.exe', 'url.dll,FileProtocolHandler', url]
+  let tries: string[][]
+  if (isWindows) tries = [['rundll32.exe', 'url.dll,FileProtocolHandler', url]]
   else {
     if (isMac === undefined) {
       isMac = await $.process.run(['uname', '-s'], { timeoutMs: 5_000 }).then(r => r.stdout.trim() === 'Darwin').catch(() => false)
     }
-    argv = [isMac ? 'open' : 'xdg-open', url]
+    tries = isMac ? [['open', url]] : [['xdg-open', url], ['gio', 'open', url], ['sensible-browser', url]]
   }
-  try {
-    const r = await $.process.run(argv, { timeoutMs: 15_000 })
-    return isWindows || r.exitCode === 0
-  } catch {
-    return false
+  for (const argv of tries) {
+    try {
+      const r = await $.process.run(argv, { timeoutMs: 15_000 })
+      if (isWindows || r.exitCode === 0) return true
+    } catch {
+      // not on this machine: the next one
+    }
   }
+  return false
 }
 // a local file as a file: URL, each part of its path percent-encoded (spaces included)
 const fileUrl = (path: string) => 'file:///' + path.replace(/\\/g, '/').replace(/^\/+/, '').split('/')
   .map((p, i) => (i === 0 && /^[A-Za-z]:$/.test(p) ? p : encodeURIComponent(p))).join('/')
 
-/** Opens the browser window: the bridge's page with the chat, else the file copy, read-only. */
-async function openPopout($: EngineInterface): Promise<string> {
+/**
+ * Opens the browser window: the bridge's page with the chat, else the file copy, read-only. `by` is who asked: the
+ * user (/office), Claude (the open_office tool), or the session's start. When no browser opens, the user's command
+ * says so and gives the address to open by hand; it carries the session's key (the bridge answers nothing without
+ * it), so only the user's own command shows it, never Claude's tool, a log, or the session's start.
+ */
+async function openPopout($: EngineInterface, by: 'user' | 'tool' | 'start' = 'user'): Promise<string> {
   await setup($)
   const path = await writePage($)
   if (!bridgeRunning && !bridge) startBridge($)
-  for (let i = 0; i < 30 && !bridge; i++) await new Promise<void>(r => void $.clock.after(150, () => r()))
+  const waits = by === 'start' ? 80 : 30             // a fresh session gives Python longer to start
+  for (let i = 0; i < waits && !bridge; i++) await new Promise<void>(r => void $.clock.after(150, () => r()))
   if (bridge) {
-    // the link carries the session token: it goes to the browser alone, never into this result or a log
-    const ok = await openUrl($, `http://127.0.0.1:${bridge.port}/office.html?k=${bridge.token}`)
-    return ok ? `The office is open in your browser, with the chat (local bridge on 127.0.0.1:${bridge.port}).`
-      : 'The office could not open a browser window on this machine.'
+    const url = `http://127.0.0.1:${bridge.port}/office.html?k=${bridge.token}`
+    if (await openUrl($, url)) return `The office is open in your browser, with the chat (local bridge on 127.0.0.1:${bridge.port}).`
+    if (by === 'user') {
+      return 'No browser window opened on this machine. Open this address in a browser on this computer:\n\n' +
+        `  ${url}\n\nIt holds this session's private key (the part after k=): the office's local server answers nothing ` +
+        'without it, so no other web page or program can use it. It stops working when this session ends. Do not share it.'
+    }
+    return 'No browser window opened on this machine. Run /office to get the address to open by hand.'
   }
   const ok = await openUrl($, fileUrl(path))
   return `The office is ${ok ? 'open in your browser' : 'written'}, read-only (${bridgeWhy || 'the chat bridge did not start'}): ${path}`
@@ -386,21 +630,73 @@ async function configText($: EngineInterface): Promise<string> {
     `Departments (${c.routing}): ${c.departments.map(d => d.name).join(', ')}`,
     `Staff: ${c.staff.length ? c.staff.map(s => s.name || 'unnamed').join(', ') : 'none'}`,
     `Pets: ${c.pets.length ? c.pets.map(p => `${p.name} (${p.coat}, ${p.color})`).join(', ') : 'none'}`,
+    `Usage: warn at ${c.usage.warnAt}%, close at ${c.usage.closeAt}%; handoff file ${c.usage.handoffFile ? handoffPath() : 'none'}`,
+    `Whiteboard countdown: ${c.deadline ? `${c.deadline.label}, ${c.deadline.y}-${String(c.deadline.mo).padStart(2, '0')}-` +
+      `${String(c.deadline.d).padStart(2, '0')} ${clockText(deadlineAt(c.deadline))}` : 'none'}`,
+    `Seasonal decor: ${c.seasons ? 'on' : 'off'}`,
+    `Opens in your browser as a session starts: ${c.openOnStart ? 'yes' : 'no'}`,
   ]
   if (cfgWarnings.length) lines.push('', 'Warnings:', ...cfgWarnings.map(w => `- ${w}`))
   lines.push('', 'Edit the file and run /office-config again to apply it.')
   return lines.join('\n')
 }
 
+// the tool Claude runs a meeting with: its description names who can attend, from the config at the session's start
+function meetingTool() {
+  const ctx = meetCtx()
+  const ids = M.attendeeIds(ctx)
+  const depts = ctx.depts.map(d => `"${d.key}" (${d.name})`).join(', ')
+  const named = ctx.staff.filter(s => !s.key.startsWith('teammate-')).map(s => `"${s.key}"`).join(', ')
+  const deptWords = `"chair", "owner", or a department: ${ctx.depts.map(d => `"${d.key}"`).join(', ')}`
+  return {
+    name: 'office_meeting_update',
+    description: "Runs a meeting in the office's conference room, which the user watches live (the attendees walk in " +
+      "and sit, the speaker's words show in a bubble, the transcript fills in). Leave id out to update the current " +
+      'meeting (the one the user called); a new id starts a new one. title, status, agenda and attendees replace what ' +
+      `was there; turn appends one turn. The owner ("owner", ${ctx.owner}) and Claude as the chair ("claude") always ` +
+      `attend; list up to ${M.OTHERS_MAX} more: departments ${depts || '(none)'}${named ? `, staff ${named}` : ''}. ` +
+      'Statuses: scheduled, gathering (they walk in), in_session (proposals), discussion, wrap_up (decisions), ended ' +
+      "(they walk out; the decisions stay on the screen). Keep each turn's text short: it is read in a bubble. Never " +
+      "put words in the owner's mouth.",
+    inputSchema: { type: 'object', properties: {
+      id: { type: 'string', description: "The meeting's id (letters, digits, - or _): leave out to update the current one" },
+      title: { type: 'string', description: "The meeting's title, at most 120 characters" },
+      status: { type: 'string', enum: [...M.STATUSES] },
+      agenda: { type: 'array', maxItems: M.AGENDA_MAX, description: "Replaces the agenda: one item per department's proposal",
+        items: { type: 'object', properties: { dept: { type: 'string', description: deptWords },
+          title: { type: 'string', description: 'At most 120 characters' } }, required: ['dept', 'title'] } },
+      attendees: { type: 'array', maxItems: M.OTHERS_MAX + 2, description: 'Replaces the attendees (the owner and Claude stay regardless)',
+        items: { type: 'object', properties: { id: { type: 'string', description: `One of: ${ids.map(x => x.id).join(', ')}` },
+          name: { type: 'string', description: 'At most 24 characters' }, dept: { type: 'string', description: deptWords },
+          role: { type: 'string', description: 'At most 40 characters' } }, required: ['id'] } },
+      turn: { type: 'object', description: 'One turn, appended to the transcript', properties: {
+        speaker_id: { type: 'string', description: "An attendee's id" }, kind: { type: 'string', enum: [...M.KINDS] },
+        text: { type: 'string', description: `What they say, at most ${M.TEXT_MAX} characters` },
+        title: { type: 'string', description: "A proposal's title (shown on the screen), at most 120 characters" } },
+      required: ['speaker_id', 'kind', 'text'] },
+    } },
+  }
+}
+// the user said something after the office opened again: its "open again" note has done its job
+function usageSpoke($: EngineInterface): void {
+  if (uMem.reopened) void usageRun($, m => { const mem = { ...m }; delete mem.reopened; return { mem } }).catch(() => undefined)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'office', description: 'Open the agent office: your agents at their desks' })
-    await $.command.register({ name: 'office-popout', description: 'Open the office in a browser window, with a chat' })
-    await $.command.register({ name: 'office-config', description: "Show or reload the office's config (cast, departments, pets)" })
+    await $.command.register({ name: 'office', description: 'Open the agent office in your browser, with a chat to Claude' })
+    await $.command.register({ name: 'office-pane', description: 'Open the office in a pane beside the chat instead' })
+    await $.command.register({ name: 'office-config', description: "Create, show or reload the office's config" })
+    await $.command.register({ name: 'office-meeting', description: 'Call a meeting in the office\'s conference room (topic optional)' })
+    await $.command.register({ name: 'office-usage', description: 'Usage windows, and when the office warns and closes' })
     await $.tool.register({ name: 'open_office', description: 'Opens the agent office in a browser window, with a chat ' +
       'to Claude at its front desk. Call it when the user asks to open the office.' })
     await setup($)
-    void $.ui.open({ id: PANE, title: TITLE })
+    await $.tool.register(meetingTool())
+    // the browser window is the office: it opens as a session starts (with a person at the prompt, the config not
+    // saying otherwise), once a session, not again on a hot reload (the kept token says the bridge already ran)
+    const reloaded = TOKEN_RE.test((await read($, keep)).token)
+    if (e.isInteractive && cfg?.openOnStart !== false && !reloaded) void openPopout($, 'start').catch(() => undefined)
     $.clock.every(POLL_MS, async () => {
       const now = await $.clock.now()
       const live = await $.agent.list()
@@ -425,10 +721,18 @@ export const register: Register = on => {
       if (polling) return                          // the last poll's slow part is still going
       polling = true
       try {
+        // the usage guard: a closed office opens once its reset time passes; a handoff asked for, saved yet?
+        await usageRun($, (m, t) => U.step(m, thresholds(), undefined, t)).catch(() => undefined)
+        await usageSaved($).catch(() => undefined)
         try {                                      // the browser copy (staff.js is the bridge's heartbeat too)
           if (pageKey && await scriptsChanged($)) pageKey = ''      // a script changed: rebuild, and pages reload
+          if (pageKey && seasonNow(now) !== pageSeason) pageKey = ''  // a new season's decor: rebuild
           if (!pageKey) await writePage($)
-          else await writeStaff($, await read($, staff), now)
+          else {
+            await refreshBoard($, now)
+            await writeMeeting($, now)
+            await writeStaff($, await read($, staff), now)
+          }
           writeErr = ''
         } catch (err) {
           writeFailed($, err)                      // the next poll tries again
@@ -440,18 +744,61 @@ export const register: Register = on => {
       }
     })
     startBridge($)
+    const u = await $.session.usage().catch(() => undefined)      // a reload keeps the readout where it was
+    if (u) {
+      await ctxSeen($, u.context?.percent).catch(() => undefined)
+      await usageRun($, (m, t) => U.step(m, thresholds(), U.cleanLimits(u.rateLimits), t)).catch(() => undefined)
+    }
     return next(e)
   })
 
-  on('command.run', { command: 'office-popout' }, async $ => ({ text: await openPopout($) }))
-  on('command.run', { command: 'office-config' }, async $ => ({ text: await configText($) }))
-  on('command.run', { command: 'office' }, async $ => {
-    await $.ui.open({ id: PANE, title: TITLE })
-    return { text: 'The agent office is open.' }
+  // The usage guard's readings: after each main-session turn, and whenever a window moves a whole point
+  on('session.measure', async ($, e, next) => {
+    try {
+      await setup($)
+      await ctxSeen($, e.context?.percent)
+      await usageRun($, (m, t) => U.step(m, thresholds(), U.cleanLimits(e.rateLimits), t))
+      await usageSaved($)
+      await pushOffice($, await $.clock.now())    // the page's readout moves with this reading
+    } catch {
+      // the guard never stands in the engine's way
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // The API refused a turn for the rate limit: the office closes now, whatever the last reading said
+  on('classic.StopFailure', async ($, e, next) => {
+    if (e.error === 'rate_limit') await usageRun($, (m, t) => U.closeForError(m, t)).catch(() => undefined)
+    return next(e)
+  }).catch(($, e, next) => next(e))   // only watching: a failure never touches the stop
+
+  on('command.run', { command: 'office-usage' }, async $ => {
+    await setup($)
+    const u = await $.session.usage().catch(() => undefined)
+    if (u) await ctxSeen($, u.context?.percent).catch(() => undefined)
+    await usageRun($, (m, t) => U.step(m, thresholds(), u ? U.cleanLimits(u.rateLimits) : undefined, t)).catch(() => undefined)
+    const now: number = await $.clock.now()
+    return { text: U.report(uMem, thresholds(), handoffPath(), ctxPct, now) }
   })
-  // "open the office": Claude calls this tool, which opens the same window /office-popout does
-  on('tool.call', { tool: 'mcp__agent-office__open_office' }, async $ => ({ result: await openPopout($) }))
-    .catch(() => ({ result: 'The office could not open. Try /office-popout.' }))
+
+  // a meeting: called by the user (/office-meeting [topic]; the office's button comes through the bridge), run by
+  // Claude through the tool
+  on('command.run', { command: 'office-meeting' }, async ($, e) => ({ text: await callMeetingNow($, e.args) }))
+  on('tool.call', { tool: 'mcp__agent-office__office_meeting_update' }, async ($, e) => {
+    const { tool: _t, tool_use_id: _u, agentId: _a, ...args } = e as unknown as Record<string, unknown>
+    return { result: await meetingUpdate($, args) }
+  }).catch(() => ({ result: 'The meeting could not be updated.' }))
+
+  on('command.run', { command: 'office' }, async $ => ({ text: await openPopout($, 'user') }))
+  on('command.run', { command: 'office-config' }, async $ => ({ text: await configText($) }))
+  on('command.run', { command: 'office-pane' }, async $ => {
+    const r = await $.ui.open({ id: PANE, title: TITLE })
+    return { text: r.isPlaced ? 'The office is open in a pane beside the chat.'
+      : 'The office pane is open, but this surface shows no panes. /office opens it in your browser.' }
+  })
+  // "open the office": Claude calls this tool, which opens the same window /office does
+  on('tool.call', { tool: 'mcp__agent-office__open_office' }, async $ => ({ result: await openPopout($, 'tool') }))
+    .catch(() => ({ result: 'The office could not open. Try /office.' }))
 
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
@@ -487,6 +834,7 @@ export const register: Register = on => {
     const kind = e.origin.kind
     if (!r.drop && !e.command && !e.isMeta && (kind === 'composer' || kind === 'bridge') && e.text.trim()) {
       await addMsg($, { who: 'owner', text: e.text.trim(), via: 'terminal' })
+      usageSpoke($)
     }
     return r
   }).catch(($, e, next) => next(e))   // only watching: a failure never stops a prompt
@@ -515,6 +863,8 @@ export const register: Register = on => {
         await addMsg($, { who: 'claude', text: e.answer.trim(), turn: e.turnId })
       }
       await writeConvo($)
+      if (U.HANDOFF_REPLY.test(e.answer)) await usageSaved($, 'reply').catch(() => undefined)
+      await usageRun($, (m, t) => U.answered(m, t)).catch(() => undefined)   // a turn answered: not rate-limited now
     }
     return r
   }).catch(($, e, next) => next(e))
@@ -554,6 +904,19 @@ export const register: Register = on => {
     const done = list.filter(s => s.isDone)
     const mins = (s: Staffer) => Math.max(0, Math.round(((s.endedAt ?? now) - s.startedAt) / 60_000))
     const label = (d: string) => deptOf(d).name.slice(0, 12)
+    // always first: "5-hour 62% · resets 3:40 PM · context 31%", each number colored by its level
+    await usageLoad($).catch(() => undefined)
+    const ro = U.readout(uMem, thresholds(), ctxPct, now)
+    const tone = (r: U.Reading | null) => (r?.level === 'red' ? 'red' : r?.level === 'amber' ? 'yellow' : undefined)
+    const shut = uMem.closed ? `Office closed${uMem.closed.until ? ` until ${clockText(uMem.closed.until)}` : ''} · ` : ''
+    const gauge = (
+      <Text>
+        {shut ? <Text color="red">{shut}</Text> : null}
+        <Text color={tone(ro.main)} bold>{ro.main ? `${ro.main.label} ${ro.main.pct}%` : '5-hour –'}</Text>
+        {ro.main?.resets ? <Text dimColor> · resets {ro.main.resets}</Text> : null}
+        {ro.ctx ? <Text color={tone(ro.ctx)} dimColor={ro.ctx.level === 'ok'}> · context {ro.ctx.pct}%</Text> : null}
+      </Text>
+    )
     const rows = (
       <Box flexDirection="column">
         <Text bold>{working.length ? `At their desks (${working.length})` : 'Nobody at a desk right now'}</Text>
@@ -571,10 +934,18 @@ export const register: Register = on => {
         ))}
       </Box>
     )
-    if (!('Svg' in els)) return rows
+    if (!('Svg' in els)) {
+      return (
+        <Box flexDirection="column">
+          {gauge}
+          {rows}
+        </Box>
+      )
+    }
     const { Svg } = els
     return (
       <Box flexDirection="column">
+        {gauge}
         <Svg source={office(list, now)} alt={`The office: ${working.length} agents at their desks, ${done.length} reports in the inbox`} isInteractive />
         {rows}
       </Box>

@@ -1,14 +1,20 @@
 // The drawing: the office from above at a 3/4 angle, the way top-down pixel-art games draw a house. The department
 // rooms with walls and doorways, your office behind its one door, the lobby where Claude keeps the front desk by the
-// entrance, the kitchen and the lounge. Drawn in art pixels into small buffers, outlined, written out as one path
-// per color and scaled up twice. The pane gets the whole scene, animated in place; the browser copy gets the office
-// without anyone who walks, and its own script (popout/engine.js) walks everyone about.
+// entrance, the kitchen, the lounge, and (in the browser window) the conference room with its whiteboard. Drawn in art
+// pixels into small buffers, outlined, written out as one path per color and scaled up twice. The pane gets the scene
+// west of the conference room, animated in place; the browser copy gets the office without anyone who walks, and its
+// own script (popout/engine.js) walks everyone about. The sky follows this machine's clock, the desk lamps come on at
+// night, and the season's decor follows its calendar (clock.ts).
 
 import type { Staffer } from '../types'
+import { BOARD } from './board'
+import type { Season } from './clock'
+import { seasonOf } from './clock'
 import type { HairStyle, Look, OfficeConfig, Pet, PetColor, Skin } from './config'
 import { STYLES as STYLE_LIST, defaultConfig } from './config'
+import { EGG_CODES } from './eggs'
 import type { CatFrame, Crew, Dept, Plan, Pt } from './plan'
-import { AH, DY, SHIFT, buildPlan, coatBuild, deskTop, homeY, inkOn, seatX } from './plan'
+import { AH, CONF, DY, SHIFT, buildPlan, coatBuild, deskTop, homeY, inkOn, seatX } from './plan'
 import { esc, hash, plain, toolLabel, wrap } from './util'
 
 // -- the plan in force: set from the config at the session's start and whenever the config is read again
@@ -412,12 +418,52 @@ const catSize = (c: CatLook, k: CatFrame): Pt => {
   return [f[0]!.length, f.length]
 }
 // a cat's frame with its feet's middle at x, y, outlined
-function catArt(c: CatLook, k: CatFrame, x: number, y: number): string {
+function catArt(c: CatLook, k: CatFrame, x: number, y: number, pet = -1): string {
   const [w, h] = catSize(c, k)
-  return paths(ring(stamp(new Map(), x - Math.floor(w / 2), y - h, CAT_FRAMES[c.build][k], catPal(c))))
+  const b = stamp(new Map(), x - Math.floor(w / 2), y - h, CAT_FRAMES[c.build][k], catPal(c))
+  const hat = pet >= 0 ? COSTUMES[SEASON]?.[pet % 2] : undefined
+  if (hat) {                 // the season's costume, on the head: centered over the ears (or the eyes, curled up)
+    const rows0 = CAT_FRAMES[c.build][k]
+    const find = (ch: RegExp) => {
+      for (let r = 0; r < rows0.length; r++) {
+        const cols = [...rows0[r]!].map((v, i) => (ch.test(v) ? i : -1)).filter(i => i >= 0)
+        if (cols.length) return { r, mid: (Math.min(...cols) + Math.max(...cols)) / 2 }
+      }
+      return undefined
+    }
+    const ear = find(/P/)
+    const eye = find(/[Ee]/)
+    const at0 = ear ? { r: ear.r - 1, mid: ear.mid } : eye ? { r: eye.r - 2, mid: eye.mid } : undefined
+    if (at0) {
+      const left = x - Math.floor(w / 2) + Math.round(at0.mid - (hat.rows[0]!.length - 1) / 2)
+      stamp(b, left, y - h + at0.r - hat.rows.length + hat.sink, hat.rows, hat.pal)
+    }
+  }
+  return paths(ring(b))
 }
-const catDefs = (id: string, c: CatLook) =>
-  CAT_KEYS.map(k => `<g id="sp-cat-${id}-${k}">${catArt(c, k, Math.floor(catSize(c, k)[0] / 2), catSize(c, k)[1])}</g>`).join('')
+const catDefs = (id: string, c: CatLook, pet: number) =>
+  CAT_KEYS.map(k => `<g id="sp-cat-${id}-${k}">${catArt(c, k, Math.floor(catSize(c, k)[0] / 2), catSize(c, k)[1], pet)}</g>`).join('')
+// where a frame's open eyes are, from its top-left (midnight makes them glow)
+const catEyes = (c: CatLook) => Object.fromEntries(CAT_KEYS.map(k => [k, CAT_FRAMES[c.build][k].flatMap((row, y) =>
+  [...row].flatMap((ch, x) => (ch === 'E' ? [[x, y]] : [])))]))
+
+// the season's costumes, two to a season (the first pet wears the first, the second the other, and so on): rows over
+// the head, sunk `sink` rows into it
+type Costume = { rows: string[]; pal: Record<string, string>; sink: number }
+const COSTUMES: Record<string, Costume[]> = {
+  halloween: [
+    { rows: ['...k...', '..kkk..', '..kPk..', 'kkkkkkk'], pal: { k: '#6d28d9', P: '#f97316' }, sink: 1 },   // a witch's hat
+    { rows: ['k.....k', 'kk...kk', 'kkk.kkk', '.kkkkk.'], pal: { k: '#2b2533' }, sink: 2 },                  // bat ears
+  ],
+  thanksgiving: [
+    { rows: ['.kkk.', '.kYk.', 'kkkkk'], pal: { k: '#2b2533', Y: '#d4a017' }, sink: 1 },                     // a buckled hat
+    { rows: ['o.r.y', '.oryo'], pal: { o: '#ea580c', r: '#b91c1c', y: '#ca8a04' }, sink: 1 },                // a leaf crown
+  ],
+  holiday: [
+    { rows: ['....W', '..RR.', '.RRR.', 'WWWWW'], pal: { R: '#dc2626', W: '#ffffff' }, sink: 1 },              // a red hat
+    { rows: ['G.G.G', '.GGG.'], pal: { G: '#16a34a' }, sink: 1 },                                             // a holly crown
+  ],
+}
 
 // a pet bed, a round cushion with a rim; the bowls, blue with a pattern
 function catBed(x: number, y: number, rim: string, pad: string): Item {
@@ -441,7 +487,7 @@ function catStatics(items: Item[], page: boolean): void {
     const [x, y] = P.cat.nodes[sp.node]!
     const [w, h] = catSize(c, st.act)
     const flip = sp.dir === 'left' && st.act !== 'front'
-    const draw = page ? `<use href="#sp-cat-p${pet.i}-${st.act}" x="${x - Math.floor(w / 2)}" y="${y - h}"/>` : catArt(c, st.act, x, y)
+    const draw = page ? `<use href="#sp-cat-p${pet.i}-${st.act}" x="${x - Math.floor(w / 2)}" y="${y - h}"/>` : catArt(c, st.act, x, y, pet.i)
     const g0 = flip ? `<g transform="matrix(-1 0 0 1 ${2 * x} 0)">${draw}</g>` : draw
     items.push({ z: sp.z ?? y, s: `<g${page ? ' class="nr-static"' : ''}><title>${esc(pet.name)}</title>${g0}</g>` })
   }
@@ -588,7 +634,8 @@ function patterns(): string {
     planks('nr-walnut', '#8a5a3c', '#815436', '#5e3a24', '#9a6a48') +
     pat('nr-stone', 12, 12, rect(0, 0, 12, 12, '#d3c9e3') + rect(0, 11, 12, 1, '#b4a8cb') + rect(11, 0, 1, 12, '#b4a8cb') +
       rect(1, 1, 3, 1, '#ded6eb')) +
-    pat('nr-den', 6, 6, rect(0, 0, 6, 6, '#1d1830') + rect(0, 0, 3, 3, '#211b37') + rect(3, 3, 3, 3, '#211b37'))
+    pat('nr-den', 6, 6, rect(0, 0, 6, 6, '#1d1830') + rect(0, 0, 3, 3, '#211b37') + rect(3, 3, 3, 3, '#211b37')) +
+    tiles('nr-board', '#3b3f63', '#373b5d', 4)
 }
 
 function glows(): string {
@@ -604,9 +651,63 @@ function glows(): string {
     `<stop offset=".66" stop-color="#2ee6d6"/><stop offset="1" stop-color="#ff4fd8"/></linearGradient>`
 }
 
-// string lights along the top of a wall, the bulbs twinkling by color
+// -- the season (clock.ts, by this machine's date; none when the config turns the seasons off) and the night's lamps.
+// A lamp's light and a carved pumpkin's glow go in LIGHTS, drawn over the night's tint: the page shows them when its
+// sky is night (CSS), the pane only at night.
+let SEASON: Season = ''
+let NIGHT = false
+let LIGHTS: string[] = []
+let TOP: string[] = []             // drawn over the stage, under the night's tint: the conference room's dimness
+function lightUp(glow: string): void {
+  if (MODE === 'page') LIGHTS.push(g(glow, ' class="nr-glow"'))
+  else if (NIGHT) LIGHTS.push(glow)
+}
+// a desk lamp: a small shade on a stand, its bulb, a warm pool of light at night
+function lamp(x: number, y: number, z: number, shade = '#2f4a7a'): Item[] {
+  if (LITE) return []
+  const body = art(b => stamp(b, x, y, ['.ttt.', 'ttttt', '..p..', '..p..', '.ppp.'], { t: shade, p: '#3a3352' }))
+  lightUp(`<path d="M${x + 0.5} ${y + 2}h4l3 6h-10z" fill="#ffe9a8" opacity=".34"/>` +
+    `<ellipse cx="${x + 2.5}" cy="${y + 8}" rx="6" ry="2" fill="#ffe9a8" opacity=".3"/>` +
+    `<ellipse cx="${x + 2.5}" cy="${y + 4}" rx="15" ry="11" fill="url(#nr-warm)"/>` + rect(x + 1, y + 2, 3, 1, '#fff3b0'))
+  return [{ z, s: body }]
+}
+// Halloween's carved pumpkins (glowing at night), Thanksgiving's plain ones
+function pumpkin(x: number, y: number, carved: boolean, big = false): Item[] {
+  if (LITE) return []
+  const rows0 = big ? ['....s....', '..OOsOO..', '.OOoOOoO.', 'OOoOOOoOO', 'OOoOOOoOO', 'OOoOOOoOO', '.OOoOoOO.', '..OOOOO..']
+    : ['...s...', '.OOsOO.', 'OOoOOoO', 'OoOOOoO', 'OOoOOoO', '.OOOOO.']
+  const face = big ? ['', '', '', '.YY...YY.', '..Y...Y..', '', '..YYYYY..', '...Y.Y...'] : ['', '', '.Y...Y.', '', '.YYYYY.', '']
+  const h = rows0.length
+  const body = art(b => {
+    stamp(b, x, y - h, rows0, { O: '#f97316', o: '#c2410c', s: '#3f6212' })
+    if (carved) stamp(b, x, y - h, face, { Y: '#ffd166' })
+  })
+  if (carved) lightUp(`<ellipse cx="${x + rows0[0]!.length / 2}" cy="${y - h / 2}" rx="${big ? 11 : 8}" ry="${big ? 8 : 6}" fill="url(#nr-warm)"/>`)
+  return [{ z: y, s: shadow(x, y, rows0[0]!.length, 1) + body }]
+}
+const autumn = () => SEASON === 'halloween' || SEASON === 'thanksgiving'
+// the holidays' tree, its bulbs twinkling
+function holidayTree(x: number, y: number): Item {
+  const rows0 = ['....Y....', '....g....', '...gGg...', '..gGgGg..', '...gGg...', '..gGgGg..', '.gGgGgGg.', '..gGgGg..', '.gGgGgGg.',
+    'gGgGgGgGg', '....t....', '...rrr...']
+  const top = y - rows0.length
+  let s = shadow(x, y, 9, 1) + art(b => stamp(b, x, top, rows0, { Y: '#fde047', g: '#166534', G: '#22c55e', t: '#7c4a24', r: '#b91c1c' }))
+  const bulbs: [number, number, string][] = [[3, 3, '#ef4444'], [5, 5, '#60a5fa'], [2, 6, '#f4c542'], [6, 7, '#ef4444'], [3, 8, '#22d3ee'],
+    [7, 9, '#f4c542'], [1, 9, '#ef4444'], [4, 7, '#f472b6']]
+  bulbs.forEach(([dx, dy, c], i) => {
+    s += `<rect x="${x + dx}" y="${top + dy}" width="1" height="1" fill="${c}">${anim('opacity', '1;.3;1', 1.4 + (i % 3) * 0.4, i * 0.2)}</rect>`
+  })
+  return { z: y, s }
+}
+
+// string lights along the top of a wall, the bulbs twinkling by color (the season's colors when there is one)
+const SEASON_BULBS: Record<string, string[]> = {
+  halloween: ['#ff8c1a', '#a855f7', '#ffb347', '#84cc16'],
+  thanksgiving: ['#f59e0b', '#dc2626', '#ca8a04', '#ea580c'],
+  holiday: ['#ef4444', '#22c55e', '#f4c542', '#60a5fa'],
+}
 function stringLights(x: number, y: number, w: number): string {
-  const bulbs = ['#ffd27a', '#ff9bd2', '#9be7ff', '#c4f59b']
+  const bulbs = SEASON_BULBS[SEASON] ?? ['#ffd27a', '#ff9bd2', '#9be7ff', '#c4f59b']
   const n = Math.floor(w / 7)
   let s = `<path d="M${x} ${y}` + [...Array(n)].map((_, i) => `Q${x + i * 7 + 3.5} ${y + 3} ${x + (i + 1) * 7} ${y}`).join('') +
     `" stroke="#120a1e" stroke-width=".6" fill="none" shape-rendering="auto"/>`
@@ -983,10 +1084,11 @@ function deptRoom(d: Dept, here: Staffer[], handed: number, sky: string, over: s
   // the staff's own desks (a beanbag for whoever works lounging), and a plant in the corner
   for (const c of P.crew) {
     if (c.dept !== d) continue
-    if (c.pose === 'type') items.push(standDesk(c.x, hy, d.color))
+    if (c.pose === 'type') items.push(standDesk(c.x, hy, d.color), ...lamp(c.x - 9, hy - 13, hy + 4.5))
     else if (MODE === 'page' || LITE) items.push(...bagItems(c.x, hy, '#a78bfa'))
   }
   items.push({ z: r.y + r.h - 1, s: plant(r.x + r.w - 12, r.y + r.h - 1, d.theme % 2 === 0) })
+  if (autumn() && d.i === 0) items.push(...pumpkin(r.x + r.w - 22, r.y + r.h - 2, SEASON === 'halloween'))
   return s
 }
 
@@ -1152,6 +1254,7 @@ function kitchen(items: Item[]): string {
       `${anim('y', '19;11', 2, i * 0.6)}${anim('opacity', '.8;0', 2, i * 0.6)}</rect>`
   }
   items.push({ z: 33, s: counter + shadow(263, 33, 61, 1) })
+  if (autumn()) items.push(...pumpkin(315, 23, SEASON === 'halloween').map(i => ({ ...i, z: 34 })))   // one on the counter
   items.push({ z: 44, s: art(b => {                                // the fridge
     block(b, 325, 10, 14, 3, 31, '#f4f1fa', '#dcd6e8')
     fill(b, 325, 24, 14, 1, '#b9b1cc')
@@ -1364,6 +1467,7 @@ function den(typing: boolean, items: Item[]): string {
     dot(b, [[x + 2, y + 25], [x + 9, y + 25], [x + 5, y + 25]], '#3a3352')
   })
   items.push({ z: 54, s: `<g><title>${esc(P.cfg.owner.name)}</title>${me}</g>` })
+  if (autumn()) items.push(...pumpkin(172, 84, SEASON === 'halloween', true))
   return s
 }
 
@@ -1428,6 +1532,7 @@ function lobby(o: { claudeHere: boolean; typing: boolean; inbox: number; onBreak
       }
       front += g(hands, ' class="nr-typing"')
     }
+    front = g(front, ' id="nr-claude"')               // the page hides it while Claude chairs a meeting, or is closed
   }
   let sign2 = ''
   if (!o.claudeHere) {
@@ -1457,11 +1562,11 @@ function lobby(o: { claudeHere: boolean; typing: boolean; inbox: number; onBreak
   // the trophy on its plinth, catching the light
   items.push({ z: 150, s: art(b => {
     block(b, 214, 140, 14, 3, 7, '#4c2a85', '#2e1065')
-    stamp(b, 216, 126, ['.GGGGGGGG.', 'GgGGGGGGgG', 'G.GGWGGG.G', 'G.GGGGGG.G', '.GGGGGGGG.', '..GGGGGG..', '...GGGG...',
-      '....GG....', '....GG....', '...gGGg...', '..GGGGGG..', '..gggggg..', '..kkkkkk..', '..kkkkkk..'],
-    { G: '#f4c542', g: '#c9962a', W: '#fff7d1', k: '#3b2a1a' })
     fill(b, 219, 145, 8, 1, '#c4b5fd')
-  }) + `<rect x="220" y="128" width="1" height="2" fill="#ffffff">${anim('opacity', '0;1;0', 2.6)}</rect>` +
+  }) + `<g id="nr-trophy">${art(b => stamp(b, 216, 126, ['.GGGGGGGG.', 'GgGGGGGGgG', 'G.GGWGGG.G', 'G.GGGGGG.G', '.GGGGGGGG.',
+    '..GGGGGG..', '...GGGG...', '....GG....', '....GG....', '...gGGg...', '..GGGGGG..', '..gggggg..'],
+  { G: '#f4c542', g: '#c9962a', W: '#fff7d1' }))}</g>` +
+    `<rect x="220" y="128" width="1" height="2" fill="#ffffff">${anim('opacity', '0;1;0', 2.6)}</rect>` +
     `<ellipse cx="221" cy="133" rx="9" ry="8" fill="url(#nr-warm)"/>` + shadow(214, 150, 14, 1) })
   // the lounge: a rug, the beanbag, a plant; Claude here on a break
   s += `<ellipse cx="210" cy="172" rx="18" ry="7" fill="#5b3fa8" opacity=".55"/>`
@@ -1480,6 +1585,13 @@ function lobby(o: { claudeHere: boolean; typing: boolean; inbox: number; onBreak
   lounge += bag.front
   items.push({ z: 176, s: lounge })
   items.push({ z: 184, s: plant(147, 184, true) })
+  if (autumn()) {                                                 // pumpkins either side of the doormat
+    items.push(...pumpkin(168, 184, SEASON === 'halloween'), ...pumpkin(199, 184, SEASON === 'halloween', true))
+  }
+  if (SEASON === 'holiday') {                                     // the tree by the front desk, lights along the wall
+    items.push(holidayTree(151, 132))
+    s += stringLights(r.x, r.y + 2, r.w)
+  }
   items.push({ z: 166, s: art(b => {
     block(b, 152, 150, 24, 5, 3, '#8b7bc8', '#6f5fae')            // the back
     block(b, 152, 157, 24, 4, 5, '#a596dc', '#7d6cbd')            // the seat
@@ -1492,6 +1604,96 @@ function lobby(o: { claudeHere: boolean; typing: boolean; inbox: number; onBreak
     fill(b, 162, 171, 6, 2, '#ec4899')
     fill(b, 171, 170, 2, 2, '#fffdf6')
   }) })
+  return s
+}
+
+// -- the conference room (the browser window's alone; the pane ends at its wall): a long walnut table down the
+// middle, four chairs a side, Claude's at its head under the wall screen, yours at its foot, and the whiteboard beside
+// the screen. The screen shows the agenda and the proposal being presented, or "Call a meeting" when none is on
+// (conference.js draws it, from meeting.js); the whiteboard shows the project's branches (extras.js, from the live
+// list). Dim and empty with no meeting on: the page lifts the dark when one is (data-meet).
+export function confGeom() {
+  const X = P.conf.x
+  return { screen: [X + 3, 6, 44, 20] as const, call: [X + 6, 20, X + 44, 25] as const, board: [X + 50, 5, BOARD[0], BOARD[1]] as const }
+}
+function conferenceRoom(items: Item[]): string {
+  const c = P.conf
+  const X = c.x
+  const r: Room = { x: X, y: c.y, w: c.w, h: c.h, face: c.face, wall: '#463a5e', floor: 'nr-board' }
+  const { screen: [sx, sy, sw, sh], board: [bx, by, bw, bh] } = confGeom()
+  const mid = X + CONF.mid
+  const [t0, t1] = [X + CONF.table[0], X + CONF.table[1]]
+  let s = roomShell(r)
+  // the wall: the screen in its bezel (conference.js writes on it), the whiteboard in its frame (extras.js)
+  s += art(b => {
+    fill(b, sx - 1, sy - 1, sw + 2, sh + 2, '#0e0c16')
+    fill(b, sx, sy, sw, sh, '#121a36')
+    fill(b, sx + sw / 2 - 3, sy + sh + 1, 6, 1, '#0e0c16')
+  }) + `<g id="nr-p-conf" transform="translate(${sx} ${sy})"><clipPath id="nr-clip-conf"><rect width="${sw}" height="${sh}"/></clipPath></g>`
+  const board = art(b => {
+    fill(b, bx - 1, by - 1, bw + 2, bh + 2, '#a9adba')
+    fill(b, bx, by, bw, bh, '#f7f5f0')
+    fill(b, bx + 4, by + bh + 1, bw - 8, 1, '#8a8f9e')                // the marker tray
+    dot(b, [[bx + 8, by + bh], [bx + 10, by + bh]], '#dc2626')
+    dot(b, [[bx + 13, by + bh], [bx + 15, by + bh]], '#2563eb')
+  }) + `<g id="nr-p-wb" transform="translate(${bx} ${by})"><clipPath id="nr-clip-wb"><rect width="${bw}" height="${bh}"/></clipPath></g>`
+  // the rug under the table, and the light when a meeting is on: the screen's glow, warm pools down the table
+  s += art(b => {
+    fill(b, t0 - 12, 44, t1 - t0 + 24, 140, '#323659')
+    fill(b, t0 - 11, 45, t1 - t0 + 22, 138, '#3a3f66')
+    fill(b, t0 - 9, 47, t1 - t0 + 18, 134, '#323659')
+  }, false)
+  LIGHTS.push(g(`<ellipse cx="${sx + sw / 2}" cy="${sy + sh + 9}" rx="26" ry="7" fill="url(#nr-screen)" opacity=".8"/>` +
+    [76, 110, 144, 176].map(y => `<ellipse cx="${mid}" cy="${y}" rx="26" ry="16" fill="url(#nr-warm)"/>`).join(''), ' class="conf-lit"'))
+  // the chairs: off each side, their backs away from the table; the head's high back behind Claude; the foot's in
+  // front of you (you sit with your back to us, facing the screen)
+  const sideChair = (x: number, y: number, west: boolean) => art(b => {
+    const back = west ? x - 8 : x + 6
+    fill(b, back, y - 15, 3, 12, '#2b2540')
+    fill(b, back, y - 15, 3, 1, '#4a4560')
+    fill(b, west ? x - 6 : x - 4, y - 7, 11, 4, '#3d3654')
+    fill(b, west ? x - 6 : x - 4, y - 7, 11, 1, '#5a5274')
+    fill(b, west ? x - 2 : x + 2, y - 3, 1, 2, '#1d1828')
+  })
+  for (const y of CONF.rows) {
+    items.push({ z: y - 1, s: sideChair(X + CONF.sitW, y, true) + shadow(X + CONF.sitW - 7, y - 1, 13, 1) })
+    items.push({ z: y - 1, s: sideChair(X + CONF.sitE, y, false) + shadow(X + CONF.sitE - 5, y - 1, 13, 1) })
+  }
+  items.push({ z: 49, s: art(b => {
+    fill(b, mid - 7, 33, 14, 10, '#2b2540')
+    fill(b, mid - 6, 34, 12, 1, '#4a4560')
+    b.delete(at(mid - 7, 33))
+    b.delete(at(mid + 6, 33))
+  }) })
+  items.push({ z: 187, s: art(b => stamp(b, mid - 5, 181, ['.kKKKKKKKk.', 'kKPKKKKKPKk', '.kKKKKKKKk.', '....kkk....', '...kkkkk...'],
+    { K: '#3d3654', k: '#2b2540', P: '#5a5274' })) })
+  // the table: walnut, a lighter runner down it; a notepad or a laptop at each side chair, a speakerphone, the agenda
+  items.push({ z: 168, s: shadow(t0 - 1, 168, t1 - t0 + 2, 1) + art(b => {
+    block(b, t0, 54, t1 - t0, 110, 4, '#a0714d', '#5e3a24')
+    fill(b, mid - 2, 58, 4, 102, '#b5845d')
+    CONF.rows.forEach((y, i) => {
+      const pad = (x: number) => fill(b, x, y - 15, 4, 3, '#fffdf6')
+      const laptop = (x: number) => {
+        fill(b, x, y - 16, 4, 4, '#c9cdd8')
+        fill(b, x, y - 13, 4, 1, '#a9adba')
+      }
+      if (i % 2) { pad(t0 + 1); laptop(t1 - 5) } else { laptop(t0 + 1); pad(t1 - 5) }
+      dot(b, [[i % 2 ? t0 + 4 : t1 - 2, y - 9]], '#9fd8ff')
+    })
+    stamp(b, mid - 3, 100, ['.kkkkk.', 'kkKKKkk', 'kKKgKKk', '.kkkkk.'], { k: '#2b2533', K: '#3a3352', g: '#5ef08a' })
+    fill(b, mid - 5, 60, 10, 3, '#fffdf6')
+    fill(b, mid - 4, 61, 6, 1, '#c9c2d6')
+  }) })
+  items.push({ z: 46, s: plant(X + c.w - 12, 46, true) })
+  if (autumn()) items.push(...pumpkin(X + 3, 190, SEASON === 'halloween'))
+  // the door from the lounge, open against the wall
+  s += rect(X - 3, 155, 3, 16, '#3c4166') + art(b => {
+    fill(b, X, 155, 2, 16, '#8a5a34')
+    fill(b, X, 155, 2, 1, '#a8704a')
+    dot(b, [[X + 1, 163]], '#e2b65e')
+  }, false)
+  // dim without a meeting (the whiteboard stays lit: it is drawn over the dimness)
+  TOP.push(g(rect(X, c.y - 2, c.w, c.h + 2, '#05020d', ' fill-opacity=".5" pointer-events="none"'), ' class="conf-dim"'), board)
   return s
 }
 
@@ -1523,12 +1725,16 @@ function scene(list: Staffer[], now: number): string {
   const sky = skyOf(t)
   const page = MODE === 'page'
   const OX = P.OX
-  const AW = P.AW
+  const AW = page ? P.AW : P.PW
   const working = list.filter(x => !x.isDone)
   const recent = page ? undefined : list.filter(x => x.isDone && x.endedAt && now - x.endedAt < HANDBACK_MS).slice(-1)[0]
   const items: Item[] = []
   const over: string[] = []
   SHARED.clear()
+  SEASON = P.cfg.seasons ? seasonOf(now) : ''
+  NIGHT = sky === 'night'
+  LIGHTS = []
+  TOP = []
   let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${AW * 2} ${AH * 2}" width="${AW * 2}" height="${AH * 2}" ` +
     `shape-rendering="crispEdges"><defs>${patterns()}${glows()}</defs><g transform="scale(2)">` + rect(0, 0, AW, AH, '#2a1a40')
 
@@ -1562,6 +1768,7 @@ function scene(list: Staffer[], now: number): string {
   s += placed(() => lobby({ claudeHere: !visit && !onBreak, typing: working.length > 0, inbox: n, onBreak }, items, over),
     SHIFT + OX, DY)
   s += placed(() => kitchen(items), OX, 0) + placed(() => breakRoom(items), OX, DY)
+  if (page) s += conferenceRoom(items)
   if (P.pets.length) {
     items.push(catBed(236 + OX, 80, '#5b3fa8', '#8f74e0'), catBed(247 + OX, 189, '#c97b86', '#f4c3cb'),
       catBowl(264 + OX, 75))
@@ -1611,16 +1818,18 @@ function scene(list: Staffer[], now: number): string {
   if (page) {                                                   // everyone's frames, for the engine
     for (const c of P.crew) defs += spriteDefs(c.id, c.look, ALL_FRAMES)
     for (const d of P.depts) defs += spriteDefs(`g-${d.id}`, agentLook(`generic-${d.id}`, d.color), WALK_FRAMES)
-    defs += spriteDefs('owner', P.cfg.owner.look, ['f0', 's0', 'b0']) + spriteDefs('claude', CLAUDE, ['f0'])
-    for (const p of P.pets) defs += catDefs(`p${p.i}`, petLook(p))
+    defs += spriteDefs('owner', P.cfg.owner.look, WALK_FRAMES) + spriteDefs('claude', CLAUDE, WALK_FRAMES)
+    for (const p of P.pets) defs += catDefs(`p${p.i}`, petLook(p), p.i)
   }
   s = s.replace('</defs>', defs + '</defs>')
+  s += TOP.join('')
   if (page) {
-    s += rect(0, 0, AW, AH, '#140a3a', ' class="sky-night" fill-opacity=".18" pointer-events="none"') +
+    s += rect(0, 0, AW, AH, '#0a0b30', ' class="sky-night" fill-opacity=".42" pointer-events="none"') +
+      `<g id="nr-lights" pointer-events="none">${LIGHTS.join('')}</g>` +
       rect(0, 0, AW, AH, 'url(#nr-vignette)', ' pointer-events="none"') +
       `<g id="nr-over">${over.filter(o => o.includes('nr-static')).join('')}</g>`
   } else {
-    if (sky === 'night') s += rect(0, 0, AW, AH, '#140a3a', ' fill-opacity=".18"')
+    if (sky === 'night') s += rect(0, 0, AW, AH, '#0a0b30', ' fill-opacity=".42"') + LIGHTS.join('')
     s += over.join('')
   }
   return s + '</g></svg>'
@@ -1630,8 +1839,9 @@ function scene(list: Staffer[], now: number): string {
 export function layoutCfg(key: string): unknown {
   const OX = P.OX
   const rooms = [...P.depts.map(d => ({ id: d.id, x: d.x, y: d.y, w: d.w, h: d.h })), { id: 'den', ...P.den },
-    { id: 'lobby', ...P.lobby }, { id: 'kitchen', ...P.kitchen }, { id: 'lounge', ...P.lounge }]
+    { id: 'lobby', ...P.lobby }, { id: 'kitchen', ...P.kitchen }, { id: 'lounge', ...P.lounge }, { id: 'conf', ...P.conf }]
   const v = P.visitor
+  const cg = confGeom()
   return {
     key, nodes: P.nodes, edges: P.edges, rooms, aw: P.AW,
     seats: Object.fromEntries(P.depts.map(d => [d.id, [...Array(d.seats)].map((_, i) => ({ id: `${d.id}-${i}`,
@@ -1649,12 +1859,24 @@ export function layoutCfg(key: string): unknown {
       nodes: P.cat.nodes, edges: P.cat.edges, jumps: P.cat.jumps, spots: P.cat.spots, start: P.cat.start,
       list: P.pets.map(p => {
         const c = petLook(p)
-        return { i: p.i, id: `p${p.i}`, speed: c.speed, size: Object.fromEntries(CAT_KEYS.map(k => [k, catSize(c, k)])) }
+        return { i: p.i, id: `p${p.i}`, name: p.name, speed: c.speed, size: Object.fromEntries(CAT_KEYS.map(k => [k, catSize(c, k)])),
+          eyes: catEyes(c) }
       }),
     },
     visit: v ? { who: v.id, spots: { side: 'den-owner', perch: 'den-perch' } } : null,
     clock: [293 + OX, 11],
     chatter: CHATTER,
+    door: [207 + OX, 158],                                       // where the CLOSED sign stands, in front of the entrance
+    conf: { seats: P.confSeats, from: P.confFrom, screen: cg.screen, call: cg.call },
+    board: { at: cg.board },
+    // the easter eggs (README's "Spoilers"): the codes the front desk keeps for itself, and where things are
+    eggs: {
+      codes: EGG_CODES,
+      press: { trophy: [234 + OX, 133, 249 + OX, 156], coffee: [285 + OX, 11, 297 + OX, 25] },
+      coffee: { spout: [290 + OX, 20], counter: 33 },
+      arcade: { screen: [265 + OX, 121, 7, 5], marquee: [263 + OX, 116, 11, 3] },
+      trophyX: 221,
+    },
   }
 }
 
@@ -1775,7 +1997,10 @@ body.desk-closed .app{gap:14px}body{overflow:auto}.app{display:flex;flex-directi
 @media (max-width:640px){.row{grid-template-columns:10px 70px minmax(0,1fr) 30px}.row em{display:none}
 .msg.owner{margin-left:12px}}
 @media (prefers-reduced-motion:reduce){.app{transition:none}body.desk-out .desk,body.desk-in .desk,.bell.ring .bell-ico{animation:none}}
-`
+.nr-glow{display:none}#nr[data-sky=night] .nr-glow{display:inline}#nr[data-closed="1"] .nr-glow{display:none}
+#nr[data-closed="1"] .nr-typing{display:none}
+.conf-lit{display:none}#nr[data-meet="on"] .conf-lit{display:inline}#nr[data-meet="on"] .conf-dim{display:none}
+${extraCss()}`
 }
 
 export function pageHtml(list: Staffer[], now: number, ver: string, where: string): string {
@@ -1787,7 +2012,7 @@ export function pageHtml(list: Staffer[], now: number, ver: string, where: strin
     `<span class="task">${dim && s.isFailed ? 'Failed: ' : ''}${esc(s.task)}</span><em>${dim ? '' : esc(toolLabel(s.tool))}</em>` +
     `<small>${mins(s)}m</small></div></li>`
   const svg = office(list, now, 'page').replace('<svg ', `<svg id="nr" role="img" aria-label="The office" ` +
-    `data-sky="${skyOf(localParts(now))}" data-busy="${working.length ? 1 : 0}" `)
+    `data-sky="${skyOf(localParts(now))}" data-busy="${working.length ? 1 : 0}" data-meet="off" data-closed="0" `)
     .replace(/ width="\d+" height="\d+"/, '')
   const src = (f: string) => `${f}?k=__AOK__&amp;v=${ver}`
   const pixelAv = (who: string) => `<svg class="av" viewBox="1 1 10 10" aria-hidden="true" shape-rendering="crispEdges">` +
@@ -1823,9 +2048,105 @@ export function pageHtml(list: Staffer[], now: number, ver: string, where: strin
     `<div class="act"><span class="hint">Enter to send · Shift+Enter for a new line</span>` +
     `<span class="count" id="fd-count" hidden></span>` +
     `<button class="send" id="fd-send" type="submit"><span data-px="Send">Send</span></button></div></form>` +
-    `<p class="off" id="fd-off">Read-only: chatting needs the local bridge. Run /office-popout in Claude Code.</p></aside></div>` +
+    `<p class="off" id="fd-off">Read-only: chatting needs the local bridge. Run /office in Claude Code.</p></aside></div>` +
     `<script src="${src('layout.js')}"></script><script src="${src('engine.js')}"></script>` +
-    `<script src="${src('frontdesk.js')}"></script></body></html>`
+    `<script src="${src('frontdesk.js')}"></script><script src="${src('conference.js')}"></script>` +
+    `<script src="${src('extras.js')}"></script></body></html>`
+}
+
+// The style of what conference.js and extras.js add to the page (the page's CSP allows no style but this file): the
+// front desk's Chat and Meeting tabs and the meeting's panel, the speaker's bubble, the chat box's "Say in meeting",
+// the usage gauge beside the title, and the usage notice at the front desk.
+function extraCss(): string {
+  return `.fd-tabs{flex:0 0 auto;display:flex;align-items:stretch;gap:2px;padding:0 10px;background:#1f1636;border-bottom:2px solid #0d0818;
+overflow-x:auto;scrollbar-width:none}.fd-tabs::-webkit-scrollbar{display:none}
+.fd-tab{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:7px;height:36px;padding:0 12px;border:0;background:none;
+color:#b1a6cf;font:700 13px/1 "Segoe UI",system-ui,sans-serif;white-space:nowrap;cursor:pointer;box-shadow:inset 0 -3px 0 transparent}
+.fd-tab:hover{color:#e9ddff}.fd-tab[aria-selected="true"]{color:#f3edff;box-shadow:inset 0 -3px 0 #a78bfa}
+.fd-tab:focus-visible{outline:2px solid #a78bfa;outline-offset:-2px}
+.udot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff5c9a;box-shadow:0 0 0 2px #0d0818}.udot[hidden]{display:none}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#34d399;animation:mt-pulse 1.6s ease-in-out infinite}
+.live-dot[hidden]{display:none}@keyframes mt-pulse{50%{opacity:.35}}
+.desk.tab-meet #fd-log,.desk.tab-meet #fd-jump{display:none!important}.desk:not(.tab-meet) #nr-meet{display:none}
+.meet{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;background:#1b1330}
+.mt-head{flex:0 0 auto;padding:10px 14px 8px;border-bottom:2px solid #0d0818;background:#1f1636}
+.mt-top{display:flex;align-items:center;gap:8px;min-width:0}
+.mt-title{flex:1 1 auto;min-width:0;margin:0;font:700 15px/1.3 "Segoe UI",system-ui,sans-serif;color:#f3edff;display:-webkit-box;
+-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.mt-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font:700 11px/1 ui-monospace,Consolas,monospace;
+letter-spacing:.06em;padding:4px 7px;background:#3a2a5c;color:#e9ddff}
+.mt-chip.on{background:#123328;color:#9ff0c9;box-shadow:inset 0 0 0 1px #2f8f6a}
+.mt-sub{margin-top:3px;font-size:12px;color:#9a90bf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mt-sub[hidden]{display:none}
+.mt-agenda{list-style:none;margin:7px 0 0;padding:0}.mt-agenda[hidden]{display:none}
+.mt-ag{display:grid;grid-template-columns:8px 92px minmax(0,1fr) 14px;align-items:center;gap:8px;height:24px;font-size:13px;color:#b1a6cf}
+.mt-ag i{width:8px;height:8px;display:block}
+.mt-ag b{font:700 11px/1 ui-monospace,Consolas,monospace;letter-spacing:.06em;color:#9a90bf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mt-ag span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mt-ag em{font-style:normal;font-size:12px;text-align:right;color:#7d74a0}
+.mt-ag.now{color:#fff}.mt-ag.now span{font-weight:700}.mt-ag.now em{color:#34d399}.mt-ag.done span{color:#8a81ad}
+.mt-log{flex:1 1 auto;min-height:0;overflow:auto;list-style:none;margin:0;padding:2px 14px 12px;scrollbar-color:#4a3670 transparent}
+.mt-line{padding:8px 0 9px;border-bottom:1px solid #2d2250}
+.mt-line.now{margin:0 -14px;padding-left:11px;padding-right:14px;background:#241a40;border-left:3px solid #a78bfa}
+.mt-who{display:flex;align-items:center;gap:7px;height:18px;min-width:0;white-space:nowrap}
+.mt-who i{flex:0 0 auto;width:8px;height:8px}
+.mt-who b{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font:700 13.5px/1 "Segoe UI",system-ui,sans-serif}
+.mt-who .dept{flex:0 0 auto;font:700 10.5px/1 ui-monospace,Consolas,monospace;letter-spacing:.06em;color:#9a90bf}
+.mt-who .kind{flex:0 0 auto;font:700 10px/1 ui-monospace,Consolas,monospace;letter-spacing:.05em;padding:3px 5px;background:#2d2250;color:#c4b5fd}
+.k-proposal .kind{background:#3a2a5c;color:#efe8ff}.k-decision .kind{background:#123328;color:#9ff0c9}
+.k-question .kind{background:#3a2e10;color:#fcd98a}
+.mt-who time{flex:0 0 auto;margin-left:auto;font-size:11.5px;color:#9a90bf;font-variant-numeric:tabular-nums}
+.mt-text{margin:4px 0 0;font-size:14px;line-height:1.42;color:#e9e3fb;overflow-wrap:anywhere;white-space:pre-line}
+.mt-text strong{display:block;color:#fff;font-weight:700;margin-bottom:1px}.k-decision .mt-text{color:#e7fbef}
+.mt-empty{margin:auto 0;padding:24px 14px;text-align:center;color:#9a90bf;font-size:14px;line-height:1.45}.mt-empty[hidden]{display:none}
+.mt-foot{flex:0 0 auto;padding:10px 14px;border-top:2px solid #0d0818;background:#1f1636}.mt-foot[hidden]{display:none}
+.mt-foot:has(.mt-call[hidden]):has(.mt-msg:empty){display:none}
+.mt-call{display:flex;gap:8px;margin:0}.mt-call[hidden]{display:none}
+.mt-call input{flex:1 1 auto;min-width:0;height:36px;padding:0 10px;background:#120b20;color:#efeaff;border:0;
+box-shadow:0 0 0 2px #4a3670;font:14px/1 "Segoe UI",system-ui,sans-serif;outline:none}
+.mt-call input:focus{box-shadow:0 0 0 2px #a78bfa}
+.mt-btn{flex:0 0 auto;height:36px;padding:0 14px;border:0;background:#a78bfa;color:#1a0f2e;font:700 13px/1 "Segoe UI",system-ui,sans-serif;
+cursor:pointer;box-shadow:0 0 0 2px #0d0818,inset 0 -3px 0 #7c5fd6;white-space:nowrap}
+.mt-btn:hover{background:#b9a2ff}.mt-btn:disabled{background:#4a3f6b;color:#8f84b0;box-shadow:0 0 0 2px #0d0818;cursor:default}
+.mt-msg{margin:7px 0 0;font-size:12.5px;color:#b1a6cf}.mt-msg:empty{display:none}
+.meet-say{display:inline-flex;align-items:center;gap:8px;height:30px;margin:0 0 8px;padding:0 6px 0 10px;border:0;background:#231a3c;
+color:#d9ccff;font:600 13px/1 "Segoe UI",system-ui,sans-serif;white-space:nowrap;cursor:pointer;box-shadow:0 0 0 2px #0d0818}
+.meet-say[hidden]{display:none}.meet-say:hover{background:#2d2250}
+.meet-say i{width:8px;height:8px;border-radius:50%;background:#6b6385}
+.meet-say b{font:700 11px/1 ui-monospace,Consolas,monospace;padding:4px 6px;background:#3a2a5c;color:#d9ccff}
+.meet-say[aria-pressed="true"]{background:#123328;color:#c9f7e2;box-shadow:0 0 0 2px #0d0818,inset 0 0 0 1px #2f8f6a}
+.meet-say[aria-pressed="true"] i{background:#34d399}.meet-say[aria-pressed="true"] b{background:#34d399;color:#062a1c}
+.mt-bub{position:fixed;z-index:5;left:0;top:0;width:max-content;max-width:min(270px,74vw);padding:7px 10px 8px;background:#fffdf6;
+color:#2b2342;box-shadow:0 0 0 2px #1a0f26,0 8px 18px #0008;font:600 13.5px/1.38 "Segoe UI",system-ui,sans-serif;pointer-events:none}
+.mt-bub[hidden]{display:none}
+.mt-bub-who{display:flex;align-items:center;gap:6px;margin-bottom:3px;white-space:nowrap}
+.mt-bub-who i{flex:0 0 auto;width:8px;height:8px}.mt-bub-who b{font:800 12.5px/1 "Segoe UI",system-ui,sans-serif}
+.mt-bub-who span{font:700 10.5px/1 ui-monospace,Consolas,monospace;letter-spacing:.05em;color:#6b6385}
+.mt-bub-who em{margin-left:auto;padding-left:10px;font:700 10.5px/1 ui-monospace,Consolas,monospace;font-style:normal;color:#8a83a3}
+.mt-bub p{margin:0;overflow-wrap:anywhere}
+.mt-bub::before,.mt-bub::after{content:"";position:absolute;left:var(--tx,50%);width:0;height:0;border-style:solid;border-color:transparent}
+.mt-bub::before{bottom:-11px;margin-left:-8px;border-width:9px 8px 0 8px;border-top-color:#1a0f26}
+.mt-bub::after{bottom:-7px;margin-left:-6px;border-width:7px 6px 0 6px;border-top-color:#fffdf6}
+.mt-bub.below::before{bottom:auto;top:-11px;border-width:0 8px 9px 8px;border-color:transparent transparent #1a0f26}
+.mt-bub.below::after{bottom:auto;top:-7px;border-width:0 6px 7px 6px;border-color:transparent transparent #fffdf6}
+.mt-bub.side::before{left:auto;bottom:auto;right:-11px;top:var(--ty,50%);margin:-8px 0 0;border-width:8px 0 8px 9px;border-color:transparent transparent transparent #1a0f26}
+.mt-bub.side::after{left:auto;bottom:auto;right:-7px;top:var(--ty,50%);margin:-6px 0 0;border-width:6px 0 6px 7px;border-color:transparent transparent transparent #fffdf6}
+.ro{display:flex;align-items:center;gap:18px;margin-left:auto;min-width:0;font:13px/1.2 "Segoe UI",system-ui,sans-serif;white-space:nowrap}
+.ro-g{display:inline-flex;align-items:baseline;gap:6px}.ro-g[hidden],.ro-r[hidden],.ro-bar[hidden]{display:none}
+.ro-l{color:#b9afd6}.ro-r{color:#a59bc8}.ro-n{font:700 17px/1 ui-monospace,Consolas,monospace;color:#f3efff}
+.ro-ctx .ro-n{font-size:14px}.ro-ctx.ok .ro-n{color:#d4ccef}
+.ro-g.none .ro-n{color:#7d74a0}.ro-g.amber .ro-n{color:#fbbf24}.ro-g.red .ro-n{color:#ff8080}
+.ro-bar{align-self:center;display:block;width:46px;height:6px;background:#2d2250;box-shadow:0 0 0 1px #0d0818}
+.ro-bar i{display:block;height:100%;background:#a99fd0}.ro-main.amber .ro-bar i{background:#fbbf24}.ro-main.red .ro-bar i{background:#f87171}
+@media (min-width:1100px){body.desk-closed .ro{margin-right:78px}}
+@media (max-width:640px){.ro{gap:12px}.ro-r,.ro-bar{display:none!important}}
+.use-note{flex:0 0 auto;display:flex;align-items:center;gap:9px;min-height:34px;padding:5px 14px;background:#2e2410;
+border-bottom:2px solid #0d0818;color:#f6e3b4;font-size:13px;line-height:1.3}.use-note[hidden]{display:none}
+.use-note b{flex:0 0 auto;font:700 12px/1 ui-monospace,Consolas,monospace;color:#1a0f2e;background:#fbbf24;padding:4px 6px}
+.use-note.shut b{background:#f87171}
+.use-note span{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.use-note em{flex:0 0 auto;font-style:normal;font-size:12px;color:#e8c46a}
+.status.shut::before{background:#6b6385}
+@media (prefers-reduced-motion:reduce){.live-dot{animation:none}}`
 }
 
 // the agents' sprites for the page: their walking frames, keyed by their look

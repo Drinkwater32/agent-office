@@ -1,11 +1,12 @@
 {
   "name": "agent-office",
   "owner": { "name": "agent-office contributors" },
+  "metadata": { "description": "A pixel-art office for Claude Code: your subagents at their desks, a chat to Claude, meetings and a usage gauge" },
   "plugins": [
     {
       "name": "agent-office",
       "source": "./",
-      "description": "A pixel-art office for your Claude Code subagents, with a browser popout and a local chat"
+      "description": "A pixel-art office for your Claude Code subagents in a browser window, with a chat, a conference room and a usage gauge"
     }
   ]
 }
