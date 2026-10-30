@@ -1,316 +1,264 @@
+<div align="center">
+
+<img src=".claude-plugin/icon.png" alt="" width="112" height="112">
+
 # agent-office
 
-A pixel-art office for Claude Code: your subagents at their desks, a chat with Claude at the front desk, and a
-conference room for meetings, in a browser window beside your session.
+**A cozy pixel-art office for your Claude Code subagents.**<br>
+Watch them walk in, take a desk, work, and hand their reports to Claude at the front desk.
 
-![The office in a browser window, with a meeting in the conference room](docs/screenshot.png)
+[![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FDrinkwater32%2Fagent-office%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=version&color=7c3aed)](CHANGELOG.md)
+[![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs)
+[![Platforms](https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-14b8a6)](#requirements)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3b82f6)](LICENSE)
 
-## Try it in 2 minutes
+[Install](#install) · [First steps](#first-steps) · [Commands](#commands) · [Make it yours](#make-it-yours) · [Troubleshooting](#troubleshooting)
 
-**You need** Claude Code (the CLI, the VS Code extension or the desktop app), and Python 3.8 or newer for the chat
-(without Python the office still opens, read-only).
+<br>
 
-1. Install it, in a terminal:
+<img src="docs/screenshot.png" alt="The office in a browser window: departments at work, a meeting in the conference room, and the chat at the front desk" width="900">
 
-   ```sh
-   claude plugin marketplace add Drinkwater32/agent-office
-   claude plugin install agent-office@agent-office
-   ```
+</div>
 
-2. Start Claude in any project folder: `claude`.
-   - Asked whether you trust the folder? Yes.
-   - Asked about **Claude in Chrome**? No: the office doesn't need it.
-3. The office opens in your browser by itself. If it doesn't, type `/office`.
+<br>
 
-**Three things to try:**
+## What you get
 
-- Ask for something with an agent: *"Explore how this project is laid out, with an agent."* It walks in, takes a
-  desk, works, then carries its report to the front desk.
-- Type in the office's chat (the front desk, on the right) and press Enter. It reaches the same session as the
-  terminal.
-- *"Call a quick meeting with two departments about naming the office cat."* They walk into the conference room, talk
-  in bubbles, and the decision goes up on the screen.
+|  |  |
+| --- | --- |
+| 🧑‍💻 **Your agents at work** | Every subagent Claude starts walks in, takes a desk in its department, and works there, with its latest words in a bubble and its current tool on a tag. |
+| 💬 **A chat at the front desk** | Type to Claude from the browser. It reaches the same session as your terminal. |
+| 🗓️ **Meetings** | Claude chairs a meeting between your departments in the conference room: proposals, discussion, and decisions on the big screen. |
+| 📊 **A usage gauge** | Your 5-hour usage and context window at a glance. Near the limit, Claude writes a handoff note so the next session can pick up where this one stopped. |
+| 🐈 **Little touches** | Office pets with minds of their own, day and night, holiday decor, a whiteboard with your branches, and an optional lo-fi soundtrack. |
 
-**Uninstall:**
-
-```sh
-claude plugin uninstall agent-office@agent-office
-claude plugin marketplace remove agent-office
-```
-
-## What it is
-
-A pixel-art office for Claude Code. Every subagent Claude starts walks in, takes a desk in its department and works
-there, its latest words in a bubble and its current tool on a tag. When it finishes, it walks its report to the front
-desk, where Claude sits. The office opens in your browser beside a chat with Claude: what you type there goes to your
-session as if you had typed it in the terminal. It also has a conference room where Claude runs meetings between your
-departments, a usage gauge, a whiteboard with your branches, pets, day and night, and an optional lo-fi soundtrack.
-
-## Requirements
-
-- **Claude Code**: the CLI, the VS Code extension or the desktop app.
-- **Python 3.8 or newer**, for the small local server behind the chat. Check that you have it:
-
-  ```sh
-  python --version        # macOS, Linux, Windows
-  python3 --version       # macOS, Linux
-  py -3 --version         # Windows
-  ```
-
-  Without Python the office still opens, read-only (no chat).
-- Windows, macOS or Linux.
+<br>
 
 ## Install
 
-1. Add the marketplace:
+**In a Claude Code session**, run these one at a time:
 
-   ```sh
-   claude plugin marketplace add Drinkwater32/agent-office
-   ```
-
-2. Install the plugin:
-
-   ```sh
-   claude plugin install agent-office@agent-office
-   ```
-
-3. Start a new Claude Code session (or run `/reload-plugins` in one that is open).
-
-The same steps from inside a session: `/plugin marketplace add Drinkwater32/agent-office`, then
-`/plugin install agent-office@agent-office`, then `/reload-plugins`. In the desktop app: click **+** next to the prompt
-box, then **Plugins**, **Add marketplace** with `Drinkwater32/agent-office`, then **Add plugin**.
-
-**Update later:**
-
-```sh
-claude plugin marketplace update agent-office
-claude plugin update agent-office@agent-office
+```
+/plugin marketplace add Drinkwater32/agent-office
+/plugin install agent-office@agent-office
+/reload-plugins
 ```
 
-Then start a new session.
+**That's it.** The office opens in your browser. If it doesn't, type `/office`.
 
-**Uninstall:**
+<details>
+<summary><b>Other ways to install</b> (the terminal, the desktop app)</summary>
+
+<br>
+
+**From a terminal:**
 
 ```sh
+claude plugin marketplace add Drinkwater32/agent-office
+claude plugin install agent-office@agent-office
+```
+
+Then start a new session with `claude`.
+
+**In the desktop app:** click **+** next to the prompt box, then **Plugins** → **Add marketplace**, enter
+`Drinkwater32/agent-office`, then **Add plugin**.
+
+</details>
+
+### Requirements
+
+- **Claude Code**: the CLI, the VS Code extension, or the desktop app, on Windows, macOS or Linux.
+- **Python 3.8 or newer**, for the small local server behind the chat. Without it, the office still opens, read-only.
+  To check, run `python --version` (or `python3 --version` on macOS and Linux, or `py -3 --version` on Windows).
+
+> [!TIP]
+> When you first start Claude in a folder, it may ask whether you trust it (say yes) and about **Claude in Chrome**
+> (say no: the office doesn't need it).
+
+<br>
+
+## First steps
+
+The office is quiet until Claude starts a subagent. Try these three:
+
+1. **Send in an agent.** Ask: *"Explore how this project is laid out, with an agent."*<br>
+   It walks in, takes a desk, works, then carries its report to the front desk.
+2. **Say hi from the browser.** Type in the chat on the right and press <kbd>Enter</kbd>.<br>
+   It reaches the same session as the terminal.
+3. **Call a meeting.** Ask: *"Call a quick meeting with two departments about naming the office cat."*<br>
+   They walk into the conference room, talk in speech bubbles, and the decision goes up on the screen.
+
+<br>
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `/office` | Opens the office in your browser, with the chat. Asking Claude to "open the office" works too. |
+| `/office-meeting [topic]` | Calls a meeting in the conference room. With no topic, it's "Our priorities for the next week". |
+| `/office-pane` | A compact text view beside the chat: who's working, the inbox, and your usage. |
+| `/office-config` | Creates a starter config if you have none, applies it, and lists anything it skipped. |
+| `/office-usage` | Shows your usage windows, the context window, the thresholds, and whether the office is open. |
+
+<details>
+<summary><b>How each part works</b></summary>
+
+<br>
+
+**The chat.** Type at the front desk and press <kbd>Enter</kbd> (<kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line).
+Close it with the X or <kbd>Esc</kbd>; the bell brings it back, with a count of replies you haven't seen. Click an
+agent in the list under the office to find it on the floor.
+
+**Meetings.** Call one with `/office-meeting Ship the search feature`, with **Call a meeting** in the front desk's
+**Meeting** tab, or with the plate on the conference room's screen. Claude chairs: each department presents a
+proposal, they discuss, and Claude records the decisions. The room plays it at a reading pace, however fast Claude
+runs it: everyone sits down before the first word, each bubble stays up long enough to read, and the decisions stay on
+the screen before everyone walks out. The Meeting tab keeps the whole transcript. To speak, turn on **Say in meeting**
+above the chat box. One meeting at a time.
+
+**The gauge.** Beside the title: your 5-hour usage window and when it resets, then this session's context window.
+Each number turns amber 15 points before `warnAt` and red at it. At `warnAt`, Claude is asked once to rewrite the
+handoff file (`.agent-office/HANDOFF.md` in the project) so a later session can pick up where this one stopped. Add
+`.agent-office/` to your `.gitignore` if you don't want it committed. At `closeAt` the office closes: the lights go
+down, the staff go home, and a sign at the door says when it opens again. The numbers appear after Claude's first
+reply, on a subscription plan.
+
+**The soundtrack.** The **Lo-fi** button beside the title plays a quiet loop, with a mute button next to it. It's off
+every time the window opens; once on, it keeps playing in the background until you turn it off. The loop is generated
+from scratch by `tools/make_lofi.py` (no samples or recordings), so it ships under the same MIT license.
+
+**The whiteboard.** In the conference room: up to three branches of this project's git repository, each marked open or
+merged, with a dot for each department that has an agent on it. It reads git once a minute and never writes to it.
+
+</details>
+
+<br>
+
+## Make it yours
+
+Run `/office-config` to create your settings file, edit it, then run `/office-config` again to apply it. Paste only
+what you want to change. For example, your name and look, your own departments, and the office pets:
+
+```json
+{
+  "owner": { "name": "Sam", "look": { "skin": "tan", "style": "curls", "top": "#14b8a6", "glasses": true } },
+  "departments": [
+    { "name": "Backend", "color": "#3b82f6", "keywords": ["api", "database", "fix"] },
+    { "name": "Frontend", "color": "#ec4899", "keywords": ["ui", "css", "page"] },
+    { "name": "Research", "agentTypes": ["Explore", "Plan"] }
+  ],
+  "pets": [{ "name": "Waffles", "coat": "short", "color": "white" }]
+}
+```
+
+📖 **Every option, with a full example:** [docs/CONFIG.md](docs/CONFIG.md)
+
+<br>
+
+## Update or uninstall
+
+```sh
+# update
+claude plugin marketplace update agent-office
+claude plugin update agent-office@agent-office
+
+# uninstall
 claude plugin uninstall agent-office@agent-office
 claude plugin marketplace remove agent-office
 ```
 
-## First run
+After an update, start a new session (or run `/reload-plugins`).
 
-1. Start a Claude Code session in any project. The office opens in your default browser by itself, with the front desk
-   (the chat) on the right.
-2. The office is quiet until Claude starts a subagent. Ask for something that uses one ("explore how the config is
-   loaded, with an agent") and watch it walk in.
-3. Type in the chat at the front desk and press Enter: it goes to the same session as the terminal.
-
-**Open it again:** `/office`.
-
-**Didn't pop up?** Run `/office`. If no browser opens, the reply gives the address to open by hand
-(`http://127.0.0.1:<port>/office.html?k=...`). The part after `k=` is this session's private key: the local server
-answers nothing without it, so no other web page or program can use it. It stops working when the session ends; don't
-share it.
-
-**Prefer the terminal?** `/office-pane` opens a compact text view beside the chat: who's working, the inbox and your
-usage. The pixel office, the chat and the conference room are in the browser.
-
-## Make it yours
-
-**Where the settings live:** one file, `office.config.json`, for every project on this computer (it is not per
-project):
-
-| OS | Where the file lives |
-| --- | --- |
-| Windows | `%USERPROFILE%\.claude\agent-office\office.config.json` |
-| macOS, Linux | `~/.claude/agent-office/office.config.json` |
-| Any, when `CLAUDE_CONFIG_DIR` is set | `$CLAUDE_CONFIG_DIR/agent-office/office.config.json` |
-
-**To edit it:** run `/office-config` once to create a starter file, edit it, then run `/office-config` again. That
-applies it right away (an open office window redraws itself) and lists anything it skipped and why. A new session
-reads it too. Department changes reach Claude's meeting tool in the next session.
-
-Paste only the parts you want to change; everything you leave out keeps its default. The pieces:
-
-**You:** your name and your character's look.
-
-```json
-"owner": { "name": "Sam", "look": { "skin": "tan", "hair": "#2a1c14", "style": "curls", "top": "#14b8a6", "glasses": true } }
-```
-
-Where you sit is fixed for now: your own office, beside the lobby.
-
-**Claude at the front desk:** its look. Its name stays "Claude".
-
-```json
-"claude": { "look": { "style": "bun", "hair": "#1d140f", "top": "#3b82f6", "headphones": "#f4c542" } }
-```
-
-**Departments:** one to eight rooms. Rename, recolor, add or remove them. `agentTypes` sends every agent of that type
-to that room; otherwise an agent goes to the department whose `keywords` its task mentions most (or set
-`"routing": "round-robin"` to take turns).
-
-```json
-"departments": [
-  { "name": "Backend", "color": "#3b82f6", "agentTypes": ["general-purpose"], "keywords": ["api", "database", "fix"] },
-  { "name": "Frontend", "color": "#ec4899", "keywords": ["ui", "css", "page"] },
-  { "name": "QA", "color": "#ef4444", "keywords": ["test", "review", "audit"] },
-  { "name": "Research", "agentTypes": ["Explore", "Plan"] }
-]
-```
-
-**The crew and the pets:** up to 12 teammates (a name, `""` for an unnamed one, or a name with a look) and up to 4
-pets. `[]` for none.
-
-```json
-"staff": ["Ada", "Grace", { "name": "Linus", "look": { "style": "beanie", "hat": "#e4572e", "beard": true } }, ""],
-"pets": [{ "name": "Waffles", "coat": "short", "color": "white" }, { "name": "Pepper", "coat": "long", "color": "brown" }]
-```
-
-**The lo-fi soundtrack:** `false` removes the Lo-fi button. When shown, it always starts off: it plays only after
-you click it (browsers don't allow sound before a click anyway).
-
-```json
-"soundtrack": { "enabled": false }
-```
-
-**The handoff file:** on by default, at `.agent-office/HANDOFF.md` in the project. Point it elsewhere (relative to the
-project, or absolute), or `""` to turn it off. `warnAt` and `closeAt` are the usage percentages for the warning (and the
-handoff) and for closing the office.
-
-```json
-"usage": { "warnAt": 85, "closeAt": 98, "handoffFile": "docs/HANDOFF.md" }
-```
-
-Also: `"openOnStart": false` (don't open the window as each session starts), `"seasons": false` (no holiday decor),
-and `"deadline": { "label": "Launch", "at": "2026-12-01T17:00" }` (a countdown on the whiteboard).
-
-**Everything at once.** Every field is optional. A missing or invalid field falls back to its default, and
-`/office-config` lists what it skipped and why. A full example (the `//` notes are for reading here; JSON has no comments, so leave them out of your
-file):
-
-```jsonc
-{
-  "owner": {                                    // you: your character, in your own office
-    "name": "Sam",                              // up to 16 letters, digits, spaces and . ' & -  (default "You")
-    "look": { "skin": "light", "hair": "#3b2a20", "style": "crop", "top": "#5b6b8c", "glasses": true }
-  },
-  "claude": { "look": { "top": "#d97757", "headphones": "#d97757" } },   // Claude's look (its name stays Claude)
-  "departments": [                              // 1 to 8 rooms; each agent goes to one, by `routing`
-    { "name": "Engineering", "color": "#7c3aed",
-      "agentTypes": ["general-purpose"],        // an agent of this type always comes here
-      "keywords": ["implement", "fix", "bug"] },  // else: the department whose words its task mentions most
-    { "name": "Review", "color": "#ef4444", "keywords": ["review", "audit", "test"] },
-    { "name": "Research", "agentTypes": ["Explore", "Plan"] }    // no color: one from the palette
-  ],
-  "routing": "match",                           // "match" (types, then keywords, then in turn) or "round-robin"
-  "staff": ["Ada", "Grace", { "name": "", "look": { "style": "curls" } }],   // up to 12; "" is an unnamed teammate
-  "pets": [                                     // up to 4; [] for none
-    { "name": "Waffles", "coat": "short", "color": "white" },
-    { "name": "Pepper", "coat": "long", "color": "brown" }
-  ],
-  "usage": {
-    "warnAt": 90,                               // % of a usage window: red gauge, and Claude writes the handoff
-    "closeAt": 98,                              // %: the office closes until the window resets
-    "handoffFile": ".agent-office/HANDOFF.md"   // relative to the project folder, or absolute; "" for no handoff
-  },
-  "deadline": { "label": "Launch", "at": "2026-12-01T17:00" },   // a countdown on the whiteboard (your local time)
-  "seasons": true,                              // Halloween, Thanksgiving and holiday decor by the date
-  "openOnStart": true,                          // open the browser window as each session starts
-  "soundtrack": { "enabled": true }             // show the Lo-fi toggle (playback always starts off); false hides it
-}
-```
-
-The values each field takes:
-
-- **look** (owner, Claude and staff): `skin` (`fair`, `light`, `tan`, `brown`, `deep`); `style` (`crop`, `curls`, `bun`,
-  `beanie`, `cap`, `long`, `lob`, `buzz`, `swoop`, `puffs`, `twists`); colors `hair`, `top`, `pants`, `shoes`, `hat`,
-  `headphones` as `#rrggbb`; `glasses` (`true`, `false` or `"clear"`); `beard` and `knit` (`true` or `false`).
-- **departments**: `name` up to 16 characters, `color` as `#rrggbb`, up to 16 `agentTypes` (`Explore`, `Plan`,
-  `general-purpose`, or your own agent types) and 60 `keywords`. Default: Engineering, Review, Design, Research.
-- **staff**: a name, or `{ "name", "look" }`; `[]` for an empty office. Default: six unnamed teammates.
-- **pets**: `coat` is `"short"` or `"long"`; `color` is `orange`, `cream`, `gray`, `black`, `brown` or `white`.
-- **usage**: `warnAt` a whole number from 50 to 99; `closeAt` from 51 to 100, above `warnAt`; `handoffFile` a path to
-  a `.md` or `.txt` file, with no `..` in it.
-- **deadline**: `at` is `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM"` on this computer's clock. Leave it out for no countdown.
-- **soundtrack**: `{ "enabled": false }` removes the Lo-fi toggle from the window entirely.
-
-## Using it
-
-| Command | What it does |
-| --- | --- |
-| `/office` | Opens the office in your browser, with the chat. Asking Claude to "open the office" does the same. |
-| `/office-pane` | A compact text view beside the chat: who's working, the inbox and your usage. The pixel office is in the browser. |
-| `/office-config` | Creates a starter config if you have none, reads it again, and lists what it holds and what it skipped. |
-| `/office-meeting [topic]` | Calls a meeting in the conference room. No topic: "Our priorities for the next week". |
-| `/office-usage` | Lists your usage windows, the context window, the thresholds, and whether the office is open. |
-
-**Talking to Claude:** type at the front desk and press Enter (Shift+Enter for a new line). Close the chat with the X or
-Esc; the bell brings it back, with a count of replies you haven't seen. Click an agent in the list under the office to
-find it on the floor.
-
-**Meetings:** call one with `/office-meeting Ship the search feature`, with **Call a meeting** in the front desk's
-**Meeting** tab, or with the plate on the conference room's screen. Claude chairs: each department presents a
-proposal, they discuss, and Claude records the decisions. The attendees walk in and sit, the speaker's words show in a
-bubble, and the Meeting tab keeps the transcript. The room plays a meeting at a reading pace however fast Claude runs
-it: everyone sits down before the first word, each bubble stays up long enough to read, and the decisions stay on the
-screen before they walk out. The transcript shows every line at once. To speak, turn on **Say in meeting** above the
-chat box: your message reaches Claude as your line in the meeting. One meeting at a time.
-
-**The gauge** (beside the title, and on the pane's first line): your 5-hour usage window's percentage and when it
-resets, then this session's context window. Each number turns amber 15 points before `warnAt` and red at it. At
-`warnAt`, Claude is asked once to rewrite the handoff file (`.agent-office/HANDOFF.md` in the project) from scratch
-(never append to it), so a later session can pick up where this one stopped. Add `.agent-office/` to your
-`.gitignore` if you don't want it committed. At `closeAt` the office closes: the lights go down, the staff go home, and a sign at the door
-says when it opens again. The numbers appear after Claude's first reply on a subscription plan.
-
-**The soundtrack:** the **Lo-fi** button beside the title plays a quiet loop; a mute button sits next to it while it
-plays. It is off every time the window opens and plays only after you click it; once on, it keeps playing when you
-switch to another window or tab, until you turn it off or mute it. The
-loop (`popout/lofi.wav`) is generated from scratch by the included script, `tools/make_lofi.py` (no samples or recordings),
-so it is this project's own and ships under the same MIT license. Run `python tools/make_lofi.py` to make it again.
-
-**The whiteboard** (in the conference room): up to three branches of this project's git repository, this folder's
-branch first, each marked open or merged, with a dot for each department that has an agent on it. It reads git once a
-minute and never writes to it. Set `deadline` for a countdown at the top.
+<br>
 
 ## Troubleshooting
 
-- **The window didn't open.** Run `/office`. If no browser opens, the reply gives the address to paste into a browser on
-  this computer. On Linux the office tries `xdg-open`, then `gio open`, then `sensible-browser`.
-- **"Read-only: chatting needs the local bridge."** The local server didn't start. Check Python (see Requirements), then
-  run `/office` again. The server's log is `~/.claude/plugins/data/agent-office/bridge.log`. A busy port is not a
-  problem: the server picks a free one by itself.
-- **The office is empty.** It shows subagents: nobody comes in until Claude starts one. The staff and pets are always
-  there.
-- **A meeting didn't start.** It starts after Claude's current task. The Meeting tab says "Called" until Claude begins.
-  A meeting nobody touches for three hours counts as over, and you can call another.
-- **The gauge shows "–".** No usage reading yet: it comes with Claude's first reply, on a subscription plan.
-- **Reset everything.** Delete `~/.claude/agent-office/office.config.json` (the defaults come back) and the folder
-  `~/.claude/plugins/data/agent-office/` (the sessions' page files and the log), then start a new session.
+<details>
+<summary><b>The window didn't open</b></summary>
 
-## Security and privacy
+<br>
 
-- The chat runs through a small server on your own computer (`bridge/bridge.py`). It listens on `127.0.0.1` only and
-  answers only to that exact address, so other machines and rebinding tricks can't reach it.
-- Each session has a random 256-bit key that every request needs; posting also needs the server's own origin, and there
-  are no CORS headers. Pages carry a strict Content-Security-Policy, and chat text is only ever shown as text.
-- No network calls: nothing leaves your computer (no weather, no telemetry). The soundtrack is a file the local server
-  serves like the page's scripts. The whiteboard runs read-only `git`
-  commands in your project, never through a shell.
-- What is stored: your config (`~/.claude/agent-office/`); each session's page files and the server's log
-  (`~/.claude/plugins/data/agent-office/`, cleared three days after a session ends); and the usage guard's memory, in
-  Claude Code's own plugin storage. The key goes only to the browser window it opens; `/office` shows it only when no
-  browser opens.
+Run `/office`. If no browser opens, the reply gives an address to paste into a browser on this computer
+(`http://127.0.0.1:<port>/office.html?k=...`). The part after `k=` is this session's private key: don't share it. On
+Linux the office tries `xdg-open`, then `gio open`, then `sensible-browser`.
 
-To report a security problem, see [SECURITY.md](SECURITY.md).
+</details>
+
+<details>
+<summary><b>"Read-only: chatting needs the local bridge"</b></summary>
+
+<br>
+
+The local server didn't start. Check that Python is installed (see [Requirements](#requirements)), then run `/office`
+again. The server's log is `~/.claude/plugins/data/agent-office/bridge.log`. A busy port isn't a problem: the server
+picks a free one by itself.
+
+</details>
+
+<details>
+<summary><b>The office is empty</b></summary>
+
+<br>
+
+It shows subagents, so nobody comes in until Claude starts one. Ask for something "with an agent". The staff and pets
+are always there.
+
+</details>
+
+<details>
+<summary><b>A meeting didn't start</b></summary>
+
+<br>
+
+It starts after Claude's current task; the Meeting tab says "Called" until then. A meeting nobody touches for three
+hours counts as over, and you can call another.
+
+</details>
+
+<details>
+<summary><b>The gauge shows "–"</b></summary>
+
+<br>
+
+There's no usage reading yet. It comes with Claude's first reply, on a subscription plan.
+
+</details>
+
+<details>
+<summary><b>Reset everything</b></summary>
+
+<br>
+
+Delete `~/.claude/agent-office/office.config.json` (the defaults come back) and the folder
+`~/.claude/plugins/data/agent-office/` (the sessions' page files and the log), then start a new session.
+
+</details>
+
+<br>
+
+## Privacy and security
+
+- 🏠 **Everything stays on your computer.** No telemetry and no network calls.
+- 🔐 **The chat server is locked down.** It listens on `127.0.0.1` only, and every request needs a random 256-bit key
+  made for that session. Pages carry a strict Content-Security-Policy, and chat text is only ever shown as text.
+- 👀 **Read-only git.** The whiteboard runs read-only `git` commands in your project, never through a shell.
+- 🗂️ **What's stored:** your config (`~/.claude/agent-office/`), each session's page files and the server's log
+  (`~/.claude/plugins/data/agent-office/`, cleared three days after a session ends), and the usage guard's memory in
+  Claude Code's own plugin storage.
+
+Found a security problem? Please report it privately: see [SECURITY.md](SECURITY.md).
+
+<br>
 
 ## Spoilers
 
 <details>
-<summary>The easter eggs (click to reveal)</summary>
+<summary>🥚 <b>The easter eggs</b> (click to reveal)</summary>
 
-None makes a sound. Codes typed at the front desk play in the office and are never sent to Claude. A long press is about
-half a second; a short click still does what it always did.
+<br>
+
+None makes a sound. Codes typed at the front desk play in the office and are never sent to Claude. A long press is
+about half a second; a short click still does what it always did.
 
 | Egg | Trigger |
 | --- | --- |
@@ -326,7 +274,14 @@ dot chased around the room, a sudden dash to another room.
 
 </details>
 
+<br>
+
 ## Develop
+
+<details>
+<summary><b>Run it from source, and the meeting tool</b></summary>
+
+<br>
 
 ```sh
 claude --plugin-dir .                                   # run it from this folder
@@ -343,11 +298,15 @@ The tool Claude runs meetings with is `mcp__agent-office__office_meeting_update`
 and the reply never repeats a turn's words. The room animates the turns at a reading pace (`popout/meetplay.js`), so
 Claude can send them as fast as it likes.
 
-## Contributing
+</details>
 
-This repository doesn't accept pull requests. They are closed automatically (see [CONTRIBUTING.md](CONTRIBUTING.md)).
-Forks are welcome.
+<br>
 
-## License
+---
 
-[MIT](LICENSE)
+<div align="center">
+
+This repository doesn't accept pull requests (see [CONTRIBUTING.md](CONTRIBUTING.md)), but forks are welcome.<br>
+[MIT License](LICENSE) · [Changelog](CHANGELOG.md)
+
+</div>

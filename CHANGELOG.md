@@ -11,6 +11,8 @@
 
 - **No pull requests:** the repository doesn't accept them. A workflow (`.github/workflows/close-pull-requests.yml`)
   closes any that is opened, with a note pointing to `CONTRIBUTING.md`.
+- **README:** rewritten for first-time users: a short install (three commands in a session), first steps, a commands
+  table, and the details folded away. The full settings reference moved to `docs/CONFIG.md`.
 
 ## 0.2.1
 
