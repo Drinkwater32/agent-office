@@ -421,8 +421,8 @@
     if (svg.getAttribute('data-meet') !== v) svg.setAttribute('data-meet', v)
   }
 
-  // -- the bubble: by the speaker, beside the room when there is space to its west, else over their head; in real
-  // type, so it reads at any size
+  // -- the bubble: over the speaker's head (under their feet when there is no room above); in real type, so it
+  // reads at any size
   const bub = el('div', 'mt-bub')
   bub.hidden = true
   bub.setAttribute('aria-hidden', 'true')       // the transcript is what a screen reader reads
@@ -434,7 +434,6 @@
   const btext = el('p', '', bub)
   document.body.appendChild(bub)
   let bubSig = ''
-  const ROOM = (CFG.rooms || []).find(r => r.id === 'conf') || null
   function where(ax, ay) {                      // an art point on the screen
     const r = svg.getBoundingClientRect()
     if (!r.width || !r.height) return null
@@ -466,23 +465,6 @@
     bub.hidden = false
     const vw = document.documentElement.clientWidth
     const vh = document.documentElement.clientHeight
-    const wall = ROOM ? where(ROOM.x, pos.y + 10) : null
-    const room0 = wall ? wall.x - Math.max(6, head0.r.left + 2) - 12 : 0
-    if (room0 >= 170) {                         // beside the room, over the lounge, pointing at the speaker
-      bub.style.maxWidth = `${Math.min(270, Math.round(room0))}px`
-      const w = bub.offsetWidth
-      const h = bub.offsetHeight
-      const left = Math.round(wall.x - 12 - w)
-      const lo = Math.max(6, head0.r.top + 2)
-      const topY = Math.round(Math.max(lo, Math.min(Math.min(vh, head0.r.bottom) - h - 2, head0.y + 8 - h / 2)))
-      bub.classList.remove('below')
-      bub.classList.add('side')
-      bub.style.transform = `translate(${left}px, ${topY}px)`
-      bub.style.setProperty('--ty', `${Math.round(Math.max(12, Math.min(h - 12, head0.y + 8 - topY)))}px`)
-      return
-    }
-    bub.classList.remove('side')
-    bub.style.maxWidth = ''
     const w = bub.offsetWidth
     const h = bub.offsetHeight
     const feet = where(pos.x, pos.feet) || head0

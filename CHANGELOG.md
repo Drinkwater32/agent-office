@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.2
+
+### Fixed
+
+- **Meeting bubbles sit over the speaker's head.** In a wide window the bubble used to sit beside the conference room
+  and point at it from the west. It now always sits above the speaker (or under their feet when there's no room above).
+
+### Changed
+
+- **No pull requests:** the repository doesn't accept them. A workflow (`.github/workflows/close-pull-requests.yml`)
+  closes any that is opened, with a note pointing to `CONTRIBUTING.md`.
+
 ## 0.2.1
 
 ### Fixed

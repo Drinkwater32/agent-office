@@ -343,6 +343,11 @@ The tool Claude runs meetings with is `mcp__agent-office__office_meeting_update`
 and the reply never repeats a turn's words. The room animates the turns at a reading pace (`popout/meetplay.js`), so
 Claude can send them as fast as it likes.
 
+## Contributing
+
+This repository doesn't accept pull requests. They are closed automatically (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+Forks are welcome.
+
 ## License
 
 [MIT](LICENSE)

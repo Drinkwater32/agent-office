@@ -1,6 +1,6 @@
 {
   "name": "agent-office",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A pixel-art office for your subagents in a browser window, with a chat to Claude at the front desk, a conference room where Claude runs meetings, and a usage gauge",
   "author": {
     "name": "Lee Drinkwater"

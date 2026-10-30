@@ -1,0 +1,22 @@
+# This repository doesn't take pull requests (see CONTRIBUTING.md): any that is opened or reopened is closed with a
+# note. It never checks out or runs the pull request's code, so pull_request_target is safe here.
+name: Close pull requests
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close with a note
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr close "$PR" --repo "$REPO" --comment "Thanks for your interest, but this repository doesn't accept pull requests, so this one has been closed automatically. See CONTRIBUTING.md. To report a security issue, use the Security tab (see SECURITY.md)."
