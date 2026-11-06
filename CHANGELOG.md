@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Names in scripts with combining marks.** A name like "अमित" or "มานิต" in `office.config.json` was rejected
+  and fell back to its default, because the name check allowed letters and digits but not the vowel signs and marks
+  those scripts are written with. A letter or digit may now carry up to 3 marks; a mark on its own, or a pile of
+  them, is still turned away. Thanks to the reporter of #1.
+
 ## 0.2.3
 
 ### Added

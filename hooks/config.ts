@@ -109,7 +109,9 @@ export const EXAMPLE_CONFIG = {
 }
 
 // -- checks
-const NAME = /^[\p{L}\p{N}][\p{L}\p{N} .'&-]*$/u
+// A letter or digit may carry up to 3 combining marks (Devanagari and Thai vowel signs, Hebrew points), so names
+// in those scripts pass, but a mark can't stand alone or pile up into a tower over its neighbors.
+const NAME = /^[\p{L}\p{N}]\p{M}{0,3}(?:[ .'&-]|[\p{L}\p{N}]\p{M}{0,3})*$/u
 const COLOR = /^#[0-9a-fA-F]{6}$/
 const AGENT_TYPE = /^[\w:.-]{1,64}$/
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)

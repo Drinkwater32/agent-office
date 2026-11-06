@@ -30,6 +30,20 @@ test('a broken file falls back field by field and says why', async () => {
   expect(warnings.length > 5).toBe(true)
 })
 
+test('names in scripts with combining marks are kept; a pile of marks is not', async () => {
+  const name = (n: string) => parseConfig(JSON.stringify({ owner: { name: n } }))
+  for (const n of ['अमित', 'มานิต', 'क्षितिज', 'שָׁלוֹם', 'Zoë', 'Nguyễn Văn An']) {
+    const { config, warnings } = name(n)
+    expect(config.owner.name).toBe(n.normalize('NFC'))
+    expect(warnings.length).toBe(0)
+  }
+  for (const n of ['a\u0301\u0301\u0301\u0301\u0301b', '\u0301abc', 'ab \u0301c']) {
+    const { config, warnings } = name(n)
+    expect(config.owner.name).toBe('You')
+    expect(warnings.join(' ')).toMatch(/may hold only/)
+  }
+})
+
 test('not JSON, not an object, or too big: the defaults', async () => {
   expect(parseConfig('{ nope').config.departments.length).toBe(4)
   expect(parseConfig('[1,2]').config.owner.name).toBe('You')
